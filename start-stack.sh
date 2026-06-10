@@ -2,14 +2,17 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # start-stack.sh — PSE Compliance Intelligence System
 #
-# Local dev   :  bash start-stack.sh
-# Full rebuild:  bash start-stack.sh --build
-# Production  :  sudo bash start-stack.sh --prod [--install-deps]
+# Default (demo/test) : bash start-stack.sh
+# Rebuild images      : bash start-stack.sh --build
+# Include monitoring  : bash start-stack.sh --full
+# Production detached : bash start-stack.sh --prod
+# Prod + monitoring   : bash start-stack.sh --prod --full
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 MODE="local"
 BUILD_FLAG=""
+FULL=false
 INSTALL_DEPS=false
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
@@ -17,9 +20,15 @@ for arg in "$@"; do
   case $arg in
     --build)        BUILD_FLAG="--build" ;;
     --prod)         MODE="prod" ;;
+    --full)         FULL=true ;;
     --install-deps) INSTALL_DEPS=true ;;
     --help|-h)
-      echo "Usage: bash start-stack.sh [--build] [--prod] [--install-deps]"
+      echo "Usage: bash start-stack.sh [--build] [--prod] [--full] [--install-deps]"
+      echo ""
+      echo "  (no flags)  Start DB + backend + frontend in foreground"
+      echo "  --build     Rebuild Docker images before starting"
+      echo "  --prod      Run detached (background)"
+      echo "  --full      Also start Prometheus + Grafana monitoring"
       exit 0 ;;
     *)
       echo "[!] Unknown argument: $arg" && exit 1 ;;
@@ -50,7 +59,7 @@ ok "Docker Compose v2 available"
 if [ ! -f ".env" ]; then
   if [ -f ".env.example" ]; then
     cp .env.example .env
-    warn ".env not found — copied from .env.example. Review secrets before production use."
+    warn ".env not found — copied from .env.example. Add your DEEPSEEK_API_KEY before running."
   else
     die ".env file missing and no .env.example to copy from."
   fi
@@ -77,17 +86,34 @@ if [ "$INSTALL_DEPS" = true ]; then
   ok "Host dependencies installed"
 fi
 
+# ── Determine which services to start ────────────────────────────────────────
+if [ "$FULL" = true ]; then
+  SERVICES=""          # empty = all services (including prometheus + grafana)
+  ok "Mode: full stack (db + backend + frontend + Prometheus + Grafana)"
+else
+  SERVICES="db backend frontend"
+  ok "Mode: slim stack (db + backend + frontend)"
+fi
+
+# ── First-run notice ─────────────────────────────────────────────────────────
+if [ -n "$BUILD_FLAG" ] || ! docker image ls | grep -q "report_generation"; then
+  warn "First build: downloads ~90 MB ONNX model. Subsequent starts are fast."
+fi
+
 # ── Launch ────────────────────────────────────────────────────────────────────
 echo ""
 if [ "$MODE" = "prod" ]; then
-  warn "Starting in PRODUCTION mode — DEBUG is off, WhiteNoise serves SPA."
-  docker compose up ${BUILD_FLAG} -d
+  warn "Starting in PRODUCTION mode — DEBUG off, WhiteNoise serves SPA."
+  # shellcheck disable=SC2086
+  docker compose up ${BUILD_FLAG} -d ${SERVICES}
 else
-  echo "  Starting local development stack..."
-  docker compose up ${BUILD_FLAG}
+  echo "  Starting stack (Ctrl+C to stop)..."
+  echo ""
+  # shellcheck disable=SC2086
+  docker compose up ${BUILD_FLAG} ${SERVICES}
 fi
 
-# ── Post-start info (detached mode only) ─────────────────────────────────────
+# ── Post-start info (detached / prod mode only) ───────────────────────────────
 if [ "$MODE" = "prod" ]; then
   echo ""
   ok "Stack is up. Waiting for backend health check..."
@@ -107,8 +133,10 @@ if [ "$MODE" = "prod" ]; then
   echo "  │  Application endpoints                        │"
   echo "  │  Frontend   →  http://localhost:5173           │"
   echo "  │  API        →  http://localhost:8000/api/     │"
+  if [ "$FULL" = true ]; then
   echo "  │  Grafana    →  http://localhost:3000           │"
   echo "  │  Prometheus →  http://localhost:9090           │"
+  fi
   echo "  └───────────────────────────────────────────────┘"
   echo ""
 fi

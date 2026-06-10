@@ -57,6 +57,9 @@ python manage.py migrate --noinput
 echo "==> Seeding ISO 27001 data..."
 python manage.py seed_iso27001
 
+echo "==> Building RAG index from ISO 27001 requirements..."
+python manage.py build_rag_index
+
 echo "==> Collecting static files..."
 python manage.py collectstatic --noinput --clear
 
