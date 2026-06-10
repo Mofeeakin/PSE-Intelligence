@@ -1,0 +1,41 @@
+# Root-level .dockerignore for the combined multi-stage Dockerfile
+# Keeps the build context small — Render and local Docker both benefit
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.sqlite3
+
+# Secrets (never send to Docker daemon)
+**/.env
+**/.env.local
+**/.env.*
+
+# Dev artefacts
+Report_Backend/venv/
+Report_Backend/media/
+Report_Backend/staticfiles/
+Report_Backend/models/
+Report_Backend/scripts/
+**/*.log
+
+# Node
+Report_UI/node_modules/
+Report_UI/dist/
+Report_UI/.output/
+
+# Git / IDE
+.git/
+.gitignore
+**/.DS_Store
+**/*.code-search
+
+# Docs / templates (not needed at runtime)
+Docs/
+Templates/
+
+# Other workspace files
+desktop.ini
+end_to_end_test.py

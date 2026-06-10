@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11pt; color: #1a1a1a; margin: 0; padding: 0; }
+
+  /* ── Cover ── */
+  .cover { page-break-after: always; text-align: center; padding: 120px 60px; background: #1e3a5f; color: white; }
+  .cover .eyebrow { font-size: 9pt; letter-spacing: 4px; text-transform: uppercase; opacity: 0.55; margin-bottom: 32px; }
+  .cover h1 { font-size: 26pt; margin-bottom: 14px; }
+  .cover .org { font-size: 14pt; opacity: 0.8; margin-bottom: 36px; }
+  .cover .meta { font-size: 10pt; opacity: 0.65; line-height: 1.9; }
+  .cover .type-badge {
+    display: inline-block; margin-bottom: 28px;
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25);
+    padding: 5px 18px; font-size: 9pt; letter-spacing: 2px; text-transform: uppercase;
+  }
+
+  /* ── Content ── */
+  .content { padding: 40px 60px; }
+  h2 { color: #1e3a5f; font-size: 15pt; border-bottom: 2px solid #1e3a5f; padding-bottom: 5px; margin-top: 32px; }
+  h3 { color: #2c5282; font-size: 12pt; margin-top: 18px; }
+  p { line-height: 1.7; margin: 10px 0; }
+
+  /* ── Score box ── */
+  .score-box { background: #f0f4f8; border-left: 4px solid #1e3a5f; padding: 16px 20px; margin: 20px 0; }
+  .score-box .total { font-size: 24pt; font-weight: bold; color: #1e3a5f; }
+  .score-box .status { font-size: 11pt; margin-top: 4px; }
+  .status-approved { color: #276749; }
+  .status-gaps { color: #975a16; }
+  .status-failed { color: #9b2c2c; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 10pt; }
+  th { background: #1e3a5f; color: white; padding: 7px 10px; text-align: left; font-size: 9pt; }
+  td { border: 1px solid #ddd; padding: 7px 10px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8f9fa; }
+
+  /* ── Rating badge ── */
+  .rating-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 3px;
+    font-size: 8.5pt; font-weight: bold; white-space: nowrap;
+  }
+
+  /* ── Legend ── */
+  .legend-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 24px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 7px;
+    border: 1px solid #ddd; border-radius: 4px; padding: 5px 10px;
+    font-size: 9pt;
+  }
+  .legend-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+
+  /* ── Severity fallback ── */
+  .high { color: #9b2c2c; font-weight: bold; }
+  .medium { color: #975a16; }
+  .low { color: #276749; }
+
+  .footer { text-align: center; font-size: 9pt; color: #888; border-top: 1px solid #ddd; padding: 12px; margin-top: 40px; }
+  @page { margin: 2cm; }
+</style>
+</head>
+<body>
+
+<!-- ── Cover Page ────────────────────────────────────────────────────────── -->
+<div class="cover">
+  <p class="eyebrow">ISO/IEC 27001:2022 — Compliance Intelligence</p>
+  <div class="type-badge">{% if is_gap %}Gap Assessment Report{% else %}Internal Audit Report{% endif %}</div>
+  <h1>{{ report.title }}</h1>
+  <div class="org">{{ report.organisation }}</div>
+  <div class="meta">
+    <p>Standard: ISO/IEC 27001:2022</p>
+    <p>Generated: {{ generated_date }}</p>
+    {% if report.department %}<p>Department: {{ report.department }}</p>{% endif %}
+    <p>Status: {{ report.status }}</p>
+  </div>
+</div>
+
+<!-- ── Report Body ───────────────────────────────────────────────────────── -->
+<div class="content">
+
+  <!-- Rating Legend -->
+  <h2>{% if is_gap %}CIRC Opinion Rating Legend{% else %}Audit Opinion Rating Legend{% endif %}</h2>
+  <div class="legend-grid">
+    {% for key, meta in legend.items %}
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:#{{ meta.bg }};border:1px solid #{{ meta.fg }};"></div>
+      <span style="color:#{{ meta.fg }};font-weight:600;">{{ meta.label }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Compliance Score Summary -->
+  {% if score %}
+  <h2>Compliance Score Summary</h2>
+  <div class="score-box">
+    <div class="total">{{ score.total_score|floatformat:1 }}%</div>
+    <div class="status
+      {% if score.status == 'APPROVED' %}status-approved
+      {% elif score.status == 'APPROVED_WITH_GAPS' %}status-gaps
+      {% else %}status-failed{% endif %}">
+      {{ score.status }}
+    </div>
+    <table style="margin-top:14px;">
+      <tr><th>Dimension</th><th>Score</th><th>Weight</th></tr>
+      <tr><td>Section Score</td><td>{{ score.section_score|floatformat:1 }}%</td><td>40%</td></tr>
+      <tr><td>Evidence Score</td><td>{{ score.evidence_score|floatformat:1 }}%</td><td>35%</td></tr>
+      <tr><td>Consistency Score</td><td>{{ score.consistency_score|floatformat:1 }}%</td><td>25%</td></tr>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Report Sections -->
+  {% for section in sections %}
+  <h2>{{ section.section_name }}</h2>
+  <p>{{ section.content }}</p>
+  {% endfor %}
+
+  <!-- Gap / Findings Register -->
+  {% if gap_rows %}
+  <h2>{% if is_gap %}Gap Findings Register{% else %}Non-Conformity &amp; Gap Register{% endif %}</h2>
+  <table>
+    {% if is_gap %}
+    <tr><th>Ref</th><th>Control Area</th><th>Gap Description</th><th>CIRC Rating</th><th>Priority</th></tr>
+    {% else %}
+    <tr><th>Ref</th><th>Requirement</th><th>Finding</th><th>Audit Rating</th><th>Severity</th></tr>
+    {% endif %}
+    {% for row in gap_rows %}
+    <tr>
+      <td>{{ row.gap.requirement.code }}</td>
+      <td>{{ row.gap.requirement.text|truncatechars:70 }}</td>
+      <td>{{ row.gap.issue }}</td>
+      <td>
+        <span class="rating-badge" style="background:{{ row.bg }};color:{{ row.fg }};">
+          {{ row.rating_label }}
+        </span>
+      </td>
+      <td class="{{ row.gap.severity }}">{{ row.gap.severity|upper }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <div class="footer">
+    Compliance Intelligence Report &middot; {{ report.organisation }} &middot; {{ generated_date }} &middot; Powered by PSE Compliance Engine
+  </div>
+
+</div>
+</body>
+</html>

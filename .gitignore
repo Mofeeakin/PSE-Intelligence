@@ -1,0 +1,47 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Django ────────────────────────────────────────────────────────────────────
+*.sqlite3
+Report_Backend/staticfiles/
+Report_Backend/media/
+
+# ── Secrets — NEVER commit ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── ONNX models (large binaries — downloaded at Docker build time) ────────────
+Report_Backend/models/
+
+# ── Node / Bun ────────────────────────────────────────────────────────────────
+node_modules/
+Report_UI/dist/
+Report_UI/.output/
+
+# ── Test output ───────────────────────────────────────────────────────────────
+*.docx
+*.pdf
+
+# ── Client documents ──────────────────────────────────────────────────────────
+Templates/ISO 27001 Docs/SOA/
+
+# ── OS / IDE ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+*.code-workspace

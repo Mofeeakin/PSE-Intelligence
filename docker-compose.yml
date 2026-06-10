@@ -1,0 +1,126 @@
+services:
+
+  # ── PostgreSQL 16 with pgvector extension ─────────────────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${DB_NAME:-pse_compliance}
+      POSTGRES_USER:     ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-pse_compliance}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  # ── Self-signed TLS certificate generator (one-shot) ─────────────────────
+  certs-init:
+    image: alpine:3.19
+    restart: "no"
+    volumes:
+      - certs_data:/certs
+    command: >
+      sh -c "
+        apk add --no-cache openssl &&
+        if [ ! -f /certs/cert.pem ]; then
+          openssl req -x509 -newkey rsa:4096
+            -keyout /certs/key.pem -out /certs/cert.pem
+            -days 3650 -nodes
+            -subj '/CN=localhost/O=PSE Consulting/C=NG' &&
+          chmod 600 /certs/key.pem &&
+          echo '[certs-init] Self-signed certificate created.';
+        else
+          echo '[certs-init] Certificate already exists — skipping.';
+        fi
+      "
+
+  # ── Django / Gunicorn backend ─────────────────────────────────────────────
+  backend:
+    build:
+      context:    ./Report_Backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DB_HOST: db
+      DB_PORT: "5432"
+    volumes:
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
+      interval: 15s
+      timeout:  10s
+      start_period: 90s
+      retries: 5
+
+  # ── React / Vite frontend (hot-reload dev server) ─────────────────────────
+  frontend:
+    build:
+      context:    ./Report_UI
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # Vite proxies /api/* to this address over the internal Docker network
+      API_PROXY_TARGET: http://backend:8000
+    ports:
+      - "5173:5173"
+
+  # ── Prometheus — metrics scraping ─────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+
+  # ── Grafana — dashboards ───────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.2
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+      GF_SERVER_ROOT_URL:         "http://localhost:3000"
+      GF_LOG_LEVEL:               warn
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+  media_data:
+  static_data:
+  certs_data:
+  prometheus_data:
+  grafana_data:

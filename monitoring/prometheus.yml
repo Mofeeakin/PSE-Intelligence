@@ -1,0 +1,19 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  scrape_timeout:      10s
+
+scrape_configs:
+
+  # Django backend health probe — confirms the app is alive
+  - job_name: pse_backend_health
+    metrics_path: /api/health/
+    static_configs:
+      - targets: [backend:8000]
+    # /api/health/ returns JSON, not Prometheus format.
+    # Prometheus will still record up/down status from HTTP response code.
+
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
