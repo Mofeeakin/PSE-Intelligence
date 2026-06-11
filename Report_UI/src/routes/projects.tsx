@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { projects as projectsApi, reports as reportsApi, admin as adminApi } from "@/lib/api-client";
@@ -30,14 +30,9 @@ function ProjectsPage() {
 
   useEffect(() => { load(); }, []);
 
-  if (role === "user") {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[40vh] text-center gap-3">
-        <p className="text-muted-foreground text-sm">You don't have access to project management.</p>
-        <Link to="/" className="text-primary text-sm hover:underline">Back to dashboard</Link>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (role === "user") navigate({ to: "/" });
+  }, [role, navigate]);
 
   return (
     <>

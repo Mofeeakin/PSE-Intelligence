@@ -3,6 +3,13 @@ import { useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useStore } from "@/lib/store";
 
+// Paths each role is allowed to visit. Sub-paths are covered by startsWith checks.
+const ROLE_ALLOWED: Record<string, string[]> = {
+  user:        ["/", "/reports", "/wizard", "/processing", "/transparency"],
+  sub_admin:   ["/", "/reports", "/wizard", "/processing", "/projects", "/transparency"],
+  super_admin: [], // wildcard — all paths allowed
+};
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -32,15 +39,33 @@ export const Route = createRootRoute({
 
 function RootComponent() {
   const authToken = useStore((s) => s.authToken);
+  const currentUser = useStore((s) => s.currentUser);
   const navigate = useNavigate();
   const location = useRouterState({ select: (s) => s.location });
 
   useEffect(() => {
-    const isPublic = location.pathname === "/login";
-    if (!authToken && !isPublic) {
-      navigate({ to: "/login" });
+    const { pathname } = location;
+    const isPublic = pathname === "/login";
+
+    if (!authToken) {
+      if (!isPublic) navigate({ to: "/login" });
+      return;
     }
-  }, [authToken, location.pathname, navigate]);
+
+    if (isPublic) {
+      navigate({ to: "/" });
+      return;
+    }
+
+    const role = currentUser?.role ?? "user";
+    if (role === "super_admin") return; // full access
+
+    const allowed = ROLE_ALLOWED[role] ?? ROLE_ALLOWED.user;
+    const permitted = allowed.some((prefix) =>
+      prefix === "/" ? pathname === "/" : pathname.startsWith(prefix)
+    );
+    if (!permitted) navigate({ to: "/" });
+  }, [authToken, currentUser?.role, location.pathname, navigate]);
 
   return (
     <AppShell>

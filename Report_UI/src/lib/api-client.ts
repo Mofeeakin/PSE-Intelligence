@@ -61,17 +61,14 @@ export interface AuthPayload {
 }
 
 export const auth = {
-  register: (username: string, email: string, password: string) =>
-    request<AuthPayload>("/api/auth/register/", {
-      method: "POST",
-      body: JSON.stringify({ username, email, password }),
-    }),
-
   login: (username: string, password: string) =>
     request<AuthPayload>("/api/auth/login/", {
       method: "POST",
       body: JSON.stringify({ username, password }),
     }),
+
+  logout: () =>
+    request<void>("/api/auth/logout/", { method: "POST" }),
 
   me: () => request<AuthPayload["user"]>("/api/auth/me/"),
 };
@@ -233,6 +230,15 @@ export const projects = {
 
 // ─── Admin ──────────────────────────────────────────────────────────────────
 
+export interface CreateUserPayload {
+  username: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  password: string;
+  role?: "super_admin" | "sub_admin" | "user";
+}
+
 export const admin = {
   listUsers: () => request<AdminUser[]>("/api/auth/users/"),
 
@@ -240,6 +246,12 @@ export const admin = {
     request<AdminUser>(`/api/auth/users/${userId}/role/`, {
       method: "PATCH",
       body: JSON.stringify({ role }),
+    }),
+
+  createUser: (payload: CreateUserPayload) =>
+    request<AuthPayload>("/api/auth/register/", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 };
 

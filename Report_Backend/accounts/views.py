@@ -8,12 +8,13 @@ from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 
 from .models import UserProfile
-from .permissions import get_role
+from .permissions import IsSuperAdmin, get_role
 from .serializers import RegisterSerializer, UserSerializer
 
 
-class RegisterView(APIView):
-    permission_classes = [AllowAny]
+class AdminCreateUserView(APIView):
+    """Super Admin only: create a new user with a specified role."""
+    permission_classes = [IsSuperAdmin]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -25,6 +26,15 @@ class RegisterView(APIView):
                 status=status.HTTP_201_CREATED,
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LogoutView(APIView):
+    """Invalidate the current session token server-side."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        request.user.auth_token.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class LoginView(APIView):
