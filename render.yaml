@@ -8,6 +8,7 @@ services:
     name: pse-compliance-app
     runtime: docker
     dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: free
     autoDeploy: true
     healthCheckPath: /api/health/
