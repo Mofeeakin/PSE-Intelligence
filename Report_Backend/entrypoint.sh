@@ -54,14 +54,18 @@ EOF
 echo "==> Running migrations..."
 python manage.py migrate --noinput
 
-echo "==> Seeding ISO 27001 data..."
-python manage.py seed_iso27001
-
-echo "==> Building RAG index from ISO 27001 requirements..."
-python manage.py build_rag_index
-
 echo "==> Collecting static files..."
 python manage.py collectstatic --noinput --clear
+
+# Seed and RAG-index build are slow on first deploy (ONNX embedding).
+# Run them in the background so Gunicorn can bind the port immediately
+# and Render's port-scan succeeds.  Both commands are idempotent — safe
+# to run async.
+echo "==> Seeding ISO 27001 data and building RAG index (background)..."
+(
+    python manage.py seed_iso27001 && \
+    python manage.py build_rag_index
+) &
 
 echo "==> Starting Gunicorn (2 workers, preload)..."
 exec gunicorn config.wsgi:application \
