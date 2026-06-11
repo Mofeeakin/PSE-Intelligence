@@ -65,32 +65,16 @@ class ComplianceScoreSerializer(serializers.ModelSerializer):
 
 
 class ReportListSerializer(serializers.ModelSerializer):
-    standard_code    = serializers.CharField(source="standard.code", read_only=True)
+    standard_code = serializers.CharField(source="standard.code", read_only=True)
     compliance_score = ComplianceScoreSerializer(read_only=True)
-    assigned_to_id   = serializers.IntegerField(source="assigned_to.id",       read_only=True, allow_null=True)
-    assigned_to_name = serializers.SerializerMethodField()
-    project_id       = serializers.IntegerField(source="project.id",           read_only=True, allow_null=True)
-    project_name     = serializers.CharField(source="project.name",            read_only=True, allow_null=True)
-    created_by_name  = serializers.SerializerMethodField()
 
     class Meta:
         model = Report
         fields = (
-            "id", "title", "organisation", "department", "standard_code", "service_type", "status",
+            "id", "title", "organisation", "standard_code", "service_type", "status",
             "current_stage", "progress_pct", "created_at", "updated_at", "compliance_score",
-            "assigned_to_id", "assigned_to_name", "project_id", "project_name", "created_by_name",
         )
         read_only_fields = fields
-
-    def get_assigned_to_name(self, obj):
-        if not obj.assigned_to_id:
-            return None
-        full = obj.assigned_to.get_full_name()
-        return full if full.strip() else obj.assigned_to.username
-
-    def get_created_by_name(self, obj):
-        full = obj.user.get_full_name()
-        return full if full.strip() else obj.user.username
 
 
 class ReportDetailSerializer(serializers.ModelSerializer):

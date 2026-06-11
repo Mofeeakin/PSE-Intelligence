@@ -2,7 +2,6 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Bell, ChevronDown, ScrollText, LogOut } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { auth } from "@/lib/api-client";
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin",
@@ -35,10 +34,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     : "??";
 
   const logout = () => {
-    auth.logout().catch(() => {}).finally(() => {
-      clearAuth();
-      navigate({ to: "/login" });
-    });
+    clearAuth();
+    navigate({ to: "/login" });
   };
   return (
     <div className="min-h-screen bg-background text-foreground">

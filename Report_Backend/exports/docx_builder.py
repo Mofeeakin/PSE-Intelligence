@@ -89,25 +89,19 @@ def _style_run(run, size_pt: int = 10, bold: bool = False, colour: str = None, i
 
 
 def _sanitise(text) -> str:
-    """Strip § (and Unicode section sign U+00A7) and collapse whitespace."""
+    """Replace § symbol with 'Clause ' and collapse double spaces."""
     if not text:
         return ""
     if not isinstance(text, str):
         text = str(text)
-    return (
-        text
-        .replace("§", "Clause ")   # Unicode section sign §
-        .replace("§", "Clause ")        # literal ASCII lookalike if any
-        .replace("  ", " ")
-        .strip()
-    )
+    return text.replace("§", "Clause ").replace("  ", " ").strip()
 
 
 def _header_row(table, headers: list[str], bg: str = DARK_NAVY, font_size: int = 9):
     row = table.rows[0]
     for i, text in enumerate(headers):
         cell = row.cells[i]
-        cell.text = _sanitise(text)
+        cell.text = text
         run = cell.paragraphs[0].runs[0]
         _style_run(run, size_pt=font_size, bold=True, colour="FFFFFF")
         _set_cell_bg(cell, bg)
@@ -306,83 +300,34 @@ def _toc_entry(doc: Document, text: str, indent_cm: float = 0,
     tabs_el.append(tab_el)
     pPr.append(tabs_el)
 
-    r = p.add_run(_sanitise(text))
+    r = p.add_run(text)
     _style_run(r, size_pt=size_pt, bold=bold, colour=colour)
 
 
-def _toc_field_begin(doc: Document):
-    """
-    Open a Word complex-field TOC.  Everything added between this call and
-    _toc_field_end() becomes the 'dirty' display text — visible in PDF / before
-    the user updates fields in Word.  When Word opens the file it replaces these
-    paragraphs with a proper page-numbered TOC derived from the Heading styles.
-    """
-    p = doc.add_paragraph()
-    p.clear()
-    p.paragraph_format.space_before = Pt(0)
-    p.paragraph_format.space_after  = Pt(0)
-
-    r_begin = OxmlElement("w:r")
-    fc_begin = OxmlElement("w:fldChar")
-    fc_begin.set(qn("w:fldCharType"), "begin")
-    fc_begin.set(qn("w:dirty"),       "true")   # Word auto-updates on open
-    r_begin.append(fc_begin)
-    p._p.append(r_begin)
-
-    r_instr = OxmlElement("w:r")
-    instr = OxmlElement("w:instrText")
-    instr.set(qn("xml:space"), "preserve")
-    instr.text = ' TOC \\o "1-3" \\h \\z \\u '
-    r_instr.append(instr)
-    p._p.append(r_instr)
-
-    r_sep = OxmlElement("w:r")
-    fc_sep = OxmlElement("w:fldChar")
-    fc_sep.set(qn("w:fldCharType"), "separate")
-    r_sep.append(fc_sep)
-    p._p.append(r_sep)
-
-
-def _toc_field_end(doc: Document):
-    """Close the complex TOC field opened by _toc_field_begin()."""
-    p = doc.add_paragraph()
-    p.clear()
-    p.paragraph_format.space_before = Pt(0)
-    p.paragraph_format.space_after  = Pt(0)
-    r_end = OxmlElement("w:r")
-    fc_end = OxmlElement("w:fldChar")
-    fc_end.set(qn("w:fldCharType"), "end")
-    r_end.append(fc_end)
-    p._p.append(r_end)
-
-
 def _add_toc(doc: Document, report, is_gap: bool):
-    """
-    Build the Table of Contents page.
-
-    Uses a Word-native TOC field (Heading 1–3 styles, dirty=true so Word
-    auto-updates page numbers on open) wrapping manually-constructed
-    dot-leader entries.  The manual entries serve as the static fallback in
-    PDF exports and as the 'dirty' placeholder before Word updates the field.
-    """
+    """Build a TOC with dot-leader entries matching the PSE audit template style."""
     _add_heading(doc, "Table of Contents", level=1)
+
+    # Subtle note — standard practice for programmatically generated DOCX
+    note_p = doc.add_paragraph()
+    note_p.clear()
+    r = note_p.add_run("(Open in Microsoft Word and press Ctrl+A then F9 to refresh page numbers)")
+    _style_run(r, size_pt=8, italic=True, colour=MID_GREY)
+    note_p.paragraph_format.space_after = Pt(6)
 
     sections = list(report.sections.order_by("order"))
 
-    # Open Word native TOC field — wraps all manual entries below
-    _toc_field_begin(doc)
-
     if is_gap:
-        _toc_entry(doc, "1.  Score Summary",     bold=True,  size_pt=11)
-        _toc_entry(doc, "2.  CIRC Rating Legend", bold=True,  size_pt=11)
+        _toc_entry(doc, "1.  Score Summary",      bold=True,  size_pt=11)
+        _toc_entry(doc, "2.  CIRC Rating Legend",  bold=True,  size_pt=11)
         top_num = 3
         for sec in sections:
             name_lower = sec.section_name.lower()
             if "scope" in name_lower and not (sec.content or "").startswith(JSON_PREFIX):
-                _toc_entry(doc, f"{top_num}.  Scope of Assessment", bold=True, size_pt=11)
+                _toc_entry(doc, f"{top_num}.  Scope of Assessment",  bold=True, size_pt=11)
                 top_num += 1
             elif "executive" in name_lower:
-                _toc_entry(doc, f"{top_num}.  Executive Summary",   bold=True, size_pt=11)
+                _toc_entry(doc, f"{top_num}.  Executive Summary",    bold=True, size_pt=11)
                 top_num += 1
 
         gap_num = top_num
@@ -394,12 +339,12 @@ def _add_toc(doc: Document, report, is_gap: bool):
                 _toc_entry(doc, f"{gap_num}.{sub}  {label}", indent_cm=0.8,
                            colour=MID_GREY, size_pt=10)
                 sub += 1
-        _toc_entry(doc, f"{gap_num + 1}.  Gap Findings Register", bold=True, size_pt=11)
-        _toc_entry(doc, f"{gap_num + 2}.  Conclusion",            bold=True, size_pt=11)
+        _toc_entry(doc, f"{gap_num + 1}.  Gap Findings Register",    bold=True, size_pt=11)
+        _toc_entry(doc, f"{gap_num + 2}.  Conclusion",               bold=True, size_pt=11)
 
     else:
-        _toc_entry(doc, "1.0  Executive Summary", bold=True, size_pt=11)
-        _toc_entry(doc, "2.0  Audit Details",      bold=True, size_pt=11)
+        _toc_entry(doc, "1.0  Executive Summary",  bold=True, size_pt=11)
+        _toc_entry(doc, "2.0  Audit Details",       bold=True, size_pt=11)
         for sub_label in [
             "2.1  Audit Criteria and Reference Documents",
             "2.2  Audit Objectives",
@@ -410,11 +355,10 @@ def _add_toc(doc: Document, report, is_gap: bool):
         ]:
             _toc_entry(doc, sub_label, indent_cm=0.8, colour=MID_GREY, size_pt=10)
 
-        # Clause sections: exclude prose-only sections handled outside the numbered list
         clause_secs = [
             s for s in sections
             if "executive" not in s.section_name.lower()
-            and "scope"     not in s.section_name.lower()
+            and "scope" not in s.section_name.lower()
             and "conclusion" not in s.section_name.lower()
         ]
         sec_num = 3
@@ -423,11 +367,8 @@ def _add_toc(doc: Document, report, is_gap: bool):
             _toc_entry(doc, f"{sec_num}.0  {label}", bold=True, size_pt=11)
             sec_num += 1
 
-        _toc_entry(doc, f"{sec_num}.0  Consolidated Audit Findings",          bold=True, size_pt=11)
+        _toc_entry(doc, f"{sec_num}.0  Consolidated Audit Findings",         bold=True, size_pt=11)
         _toc_entry(doc, f"{sec_num + 1}.0  Audit Conclusions and Recommendation", bold=True, size_pt=11)
-
-    # Close Word native TOC field
-    _toc_field_end(doc)
 
     doc.add_page_break()
 
@@ -1000,10 +941,7 @@ def build_docx(report: Report) -> bytes:
     doc = Document()
     service_type = getattr(report, "service_type", "audit_report") or "audit_report"
     is_gap = service_type == "gap_assessment"
-    # Per-report logo takes precedence; fall back to project-level logo
-    logo = getattr(report, "logo", None) or (
-        getattr(report.project, "logo", None) if report.project_id else None
-    )
+    logo = getattr(report, "logo", None)
 
     # Page margins
     for sect in doc.sections:

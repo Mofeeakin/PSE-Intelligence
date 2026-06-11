@@ -188,11 +188,6 @@ function _mapSummary(s: ReportSummary): Report {
     updatedAt: s.updated_at,
     promptVersion: "v3.0",
     serviceType: (s.service_type as ServiceType) || "audit_report",
-    assignedToId: s.assigned_to_id ?? null,
-    assignedToName: s.assigned_to_name ?? null,
-    projectId: s.project_id ?? null,
-    projectName: s.project_name ?? null,
-    createdByName: s.created_by_name ?? null,
   };
 }
 

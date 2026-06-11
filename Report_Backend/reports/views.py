@@ -1,6 +1,5 @@
 import threading
 from django.db import models as db_models
-from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
 from rest_framework import status
@@ -219,56 +218,6 @@ class AgentLogsView(APIView):
             return Response({"error": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         logs = report.agent_logs.all()
         return Response(AgentExecutionSerializer(logs, many=True).data)
-
-
-class ReportAssignView(APIView):
-    """PATCH /api/reports/:id/assign/ — Sub Admin or Super Admin assigns a report to a user.
-    The target user must be a member of the report's project (if the report has one)."""
-
-    def patch(self, request, pk):
-        role = get_role(request.user)
-        if role not in ("super_admin", "sub_admin"):
-            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
-
-        # Sub Admin can only assign reports in projects they created
-        if role == "sub_admin":
-            project_ids = Project.objects.filter(
-                created_by=request.user
-            ).values_list("id", flat=True)
-            try:
-                report = Report.objects.get(
-                    db_models.Q(pk=pk),
-                    db_models.Q(user=request.user) | db_models.Q(project_id__in=project_ids),
-                )
-            except Report.DoesNotExist:
-                return Response({"error": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        else:
-            report = get_object_or_404(Report, pk=pk)
-
-        assigned_to_id = request.data.get("assigned_to_id")
-        if assigned_to_id is None:
-            # Unassign
-            report.assigned_to = None
-            report.save(update_fields=["assigned_to"])
-            return Response(ReportListSerializer(report).data)
-
-        try:
-            target_user = User.objects.get(pk=assigned_to_id)
-        except User.DoesNotExist:
-            return Response({"error": "User not found."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # If the report belongs to a project, the target user must be a project member
-        if report.project_id:
-            project = report.project
-            if not project.assigned_members.filter(pk=target_user.pk).exists():
-                return Response(
-                    {"error": "User is not a member of this project. Add them to the project first."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        report.assigned_to = target_user
-        report.save(update_fields=["assigned_to"])
-        return Response(ReportListSerializer(report).data)
 
 
 # ── Project Views ──────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 from django.db import models
-from reports.models import Report, Project
+from reports.models import Report
 
 
 class ExportFile(models.Model):
@@ -41,27 +41,3 @@ class ReportLogo(models.Model):
 
     def __str__(self):
         return f"Logo for {self.report} ({self.placement})"
-
-
-class ProjectLogo(models.Model):
-    """Project-level logo that auto-applies to all reports in the project
-    unless a per-report ReportLogo overrides it."""
-
-    PLACEMENT_COVER     = "cover_only"
-    PLACEMENT_EVERY     = "every_page"
-    PLACEMENT_SELECTED  = "selected_pages"
-    PLACEMENT_CHOICES   = [
-        (PLACEMENT_COVER,    "Cover Page Only"),
-        (PLACEMENT_EVERY,    "Every Page (Page Header)"),
-        (PLACEMENT_SELECTED, "Selected Pages"),
-    ]
-
-    project      = models.OneToOneField(Project, on_delete=models.CASCADE, related_name="logo")
-    image        = models.ImageField(upload_to="project_logos/%Y/%m/")
-    placement    = models.CharField(max_length=20, choices=PLACEMENT_CHOICES, default=PLACEMENT_COVER)
-    pages        = models.JSONField(default=list, blank=True)
-    width_inches = models.FloatField(default=2.4)
-    created_at   = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Logo for project {self.project} ({self.placement})"

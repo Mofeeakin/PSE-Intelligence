@@ -86,12 +86,6 @@ export interface Report {
   updatedAt: string;
   promptVersion: string;
   serviceType?: ServiceType;
-  // Assignment & project fields (from API)
-  assignedToId?: number | null;
-  assignedToName?: string | null;
-  projectId?: number | null;
-  projectName?: string | null;
-  createdByName?: string | null;
 }
 
 export interface Project {
@@ -127,5 +121,3 @@ export interface ReportLogo {
   image_url: string | null;
   created_at: string;
 }
-
-export type ProjectLogo = ReportLogo;

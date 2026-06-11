@@ -3,9 +3,7 @@ import { useEffect, useState } from "react";
 import { PageHeader, ScoreBadge, StatusPill } from "@/components/AppShell";
 import { FindingsTable } from "@/components/FindingsTable";
 import { useStore } from "@/lib/store";
-import { AlertTriangle, CheckCircle2, FileText, RefreshCw, Download, ChevronRight, Sparkles, ShieldAlert, Loader2, UserCheck } from "lucide-react";
-import { admin as adminApi, reports as reportsApi } from "@/lib/api-client";
-import type { AdminUser } from "@/lib/types";
+import { AlertTriangle, CheckCircle2, FileText, RefreshCw, Download, ChevronRight, Sparkles, ShieldAlert, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/reports/$id")({
   head: () => ({ meta: [{ title: "Report — Compliance Intelligence" }] }),
@@ -19,9 +17,7 @@ function Viewer() {
   const loadReport = useStore((s) => s.loadReport);
   const revalidate = useStore((s) => s.revalidate);
   const rescore = useStore((s) => s.rescore);
-  const currentUser = useStore((s) => s.currentUser);
   const [fetching, setFetching] = useState(!report);
-  const canAssign = currentUser?.role === "super_admin" || currentUser?.role === "sub_admin";
 
   useEffect(() => {
     setFetching(true);
@@ -209,81 +205,9 @@ function Viewer() {
               </Link>
             </div>
           </div>
-
-          {canAssign && <AssignPanel reportId={id} currentAssignedId={report.assignedToId ?? null} onAssigned={() => loadReport(id)} />}
         </aside>
       </div>
     </>
-  );
-}
-
-function AssignPanel({
-  reportId,
-  currentAssignedId,
-  onAssigned,
-}: {
-  reportId: string;
-  currentAssignedId: number | null;
-  onAssigned: () => void;
-}) {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [selected, setSelected] = useState<string>(currentAssignedId ? String(currentAssignedId) : "");
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  useEffect(() => {
-    adminApi.listUsers().then(setUsers).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    setSelected(currentAssignedId ? String(currentAssignedId) : "");
-  }, [currentAssignedId]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    setMsg("");
-    try {
-      await reportsApi.assign(reportId, selected ? parseInt(selected, 10) : null);
-      setMsg("Assignment saved.");
-      onAssigned();
-    } catch {
-      setMsg("Failed to save assignment.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="bg-card border border-border rounded-sm p-5 space-y-3">
-      <div className="flex items-center gap-2">
-        <UserCheck className="h-3.5 w-3.5 text-primary" />
-        <div className="label-eyebrow">Assign report</div>
-      </div>
-      <p className="text-xs text-muted-foreground">Assign this report to a staff member for generation or review.</p>
-      <select
-        value={selected}
-        onChange={(e) => setSelected(e.target.value)}
-        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-sm focus:outline-none focus:border-primary"
-      >
-        <option value="">— Unassigned —</option>
-        {users.filter(u => u.role === "user").map((u) => (
-          <option key={u.id} value={String(u.id)}>
-            {u.first_name && u.last_name ? `${u.first_name} ${u.last_name}` : u.username}
-          </option>
-        ))}
-      </select>
-      <div className="flex items-center gap-2">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-sm hover:opacity-90 disabled:opacity-40"
-        >
-          {saving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <UserCheck className="h-3 w-3" />}
-          {saving ? "Saving…" : "Save"}
-        </button>
-        {msg && <span className="text-xs text-muted-foreground">{msg}</span>}
-      </div>
-    </div>
   );
 }
 

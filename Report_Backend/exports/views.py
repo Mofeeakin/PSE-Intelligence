@@ -11,12 +11,12 @@ from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
-from reports.models import Report, Project
+from reports.models import Report
 from accounts.permissions import get_role
 from .docx_builder import build_docx
 from .pdf_builder import build_pdf
-from .models import ReportLogo, ProjectLogo
-from .serializers import ReportLogoSerializer, ProjectLogoSerializer
+from .models import ReportLogo
+from .serializers import ReportLogoSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -59,28 +59,15 @@ class ExportView(APIView):
 
         role = get_role(request.user)
         qs = Report.objects.select_related(
-            "standard", "compliance_score", "logo", "project__logo"
+            "standard", "compliance_score", "logo"
         ).prefetch_related(
             "sections", "gaps__requirement", "evidence"
         )
         try:
             if role == "super_admin":
                 report = qs.get(pk=pk)
-            elif role == "sub_admin":
-                from django.db.models import Q
-                project_ids = Project.objects.filter(
-                    created_by=request.user
-                ).values_list("id", flat=True)
-                report = qs.get(
-                    Q(pk=pk),
-                    Q(user=request.user) | Q(project_id__in=project_ids),
-                )
             else:
-                from django.db.models import Q
-                report = qs.get(
-                    Q(pk=pk),
-                    Q(user=request.user) | Q(assigned_to=request.user),
-                )
+                report = qs.get(pk=pk, user=request.user)
         except Report.DoesNotExist:
             return Response({"error": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -145,62 +132,6 @@ class ReportLogoView(APIView):
     def delete(self, request, report_id):
         report = self._get_report(request, report_id)
         logo = getattr(report, "logo", None)
-        if logo:
-            logo.image.delete(save=False)
-            logo.delete()
-        return Response(status=204)
-
-
-class ProjectLogoView(APIView):
-    """Upload, retrieve, or remove a logo associated with a project.
-    Only Sub Admin (project owner) and Super Admin can manage project logos."""
-    parser_classes = [MultiPartParser, FormParser]
-
-    def _get_project(self, request, project_id):
-        role = get_role(request.user)
-        if role == "super_admin":
-            return get_object_or_404(Project, id=project_id)
-        if role == "sub_admin":
-            return get_object_or_404(Project, id=project_id, created_by=request.user)
-        return None
-
-    def get(self, request, project_id):
-        project = self._get_project(request, project_id)
-        if project is None:
-            return Response({"error": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        logo = getattr(project, "logo", None)
-        if not logo:
-            return Response({"logo": None})
-        return Response({"logo": ProjectLogoSerializer(logo, context={"request": request}).data})
-
-    def post(self, request, project_id):
-        project = self._get_project(request, project_id)
-        if project is None:
-            return Response({"error": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        logo, _ = ProjectLogo.objects.get_or_create(project=project)
-        if "image" in request.FILES:
-            if logo.image:
-                logo.image.delete(save=False)
-            logo.image = request.FILES["image"]
-        logo.placement = request.data.get("placement", logo.placement)
-        try:
-            logo.width_inches = float(request.data.get("width_inches", logo.width_inches))
-        except (TypeError, ValueError):
-            pass
-        raw_pages = request.data.get("pages")
-        if raw_pages is not None:
-            try:
-                logo.pages = json.loads(raw_pages) if isinstance(raw_pages, str) else list(raw_pages)
-            except (ValueError, TypeError):
-                logo.pages = []
-        logo.save()
-        return Response(ProjectLogoSerializer(logo, context={"request": request}).data)
-
-    def delete(self, request, project_id):
-        project = self._get_project(request, project_id)
-        if project is None:
-            return Response({"error": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        logo = getattr(project, "logo", None)
         if logo:
             logo.image.delete(save=False)
             logo.delete()

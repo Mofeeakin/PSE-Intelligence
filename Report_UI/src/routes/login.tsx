@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { auth, ApiError } from "@/lib/api-client";
@@ -13,7 +13,9 @@ function LoginPage() {
   const navigate = useNavigate();
   const setAuth = useStore((s) => s.setAuth);
 
+  const [tab, setTab] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,12 @@ function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const payload = await auth.login(username, password);
+      let payload;
+      if (tab === "login") {
+        payload = await auth.login(username, password);
+      } else {
+        payload = await auth.register(username, email, password);
+      }
       setAuth(payload.token, payload.user);
       navigate({ to: "/" });
     } catch (err) {
@@ -50,9 +57,18 @@ function LoginPage() {
 
         {/* Card */}
         <div className="border border-border rounded-md bg-card p-6 space-y-5 shadow-sm">
-          <div className="space-y-1">
-            <h2 className="font-display text-xl font-semibold">Sign in</h2>
-            <p className="text-xs text-muted-foreground">Use the credentials provided by your administrator.</p>
+          {/* Tabs */}
+          <div className="flex rounded-sm border border-border overflow-hidden text-sm font-medium">
+            {(["login", "register"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => { setTab(t); setError(null); }}
+                className={`flex-1 py-2 transition-colors ${tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {t === "login" ? "Sign in" : "Register"}
+              </button>
+            ))}
           </div>
 
           <form onSubmit={handle} className="space-y-4">
@@ -68,6 +84,21 @@ function LoginPage() {
                 className="w-full px-3 py-2 rounded-sm border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
+
+            {tab === "register" && (
+              <div className="space-y-1">
+                <label htmlFor="email" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</label>
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-3 py-2 rounded-sm border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            )}
 
             <div className="space-y-1">
               <label htmlFor="password" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Password</label>
@@ -94,7 +125,7 @@ function LoginPage() {
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90 disabled:opacity-60 transition-opacity"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              Sign in
+              {tab === "login" ? "Sign in" : "Create account"}
             </button>
           </form>
         </div>
