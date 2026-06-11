@@ -54,6 +54,30 @@ EOF
 echo "==> Running migrations..."
 python manage.py migrate --noinput
 
+# Create superuser from env vars if DJANGO_SUPERUSER_PASSWORD is set.
+# Set DJANGO_SUPERUSER_USERNAME, DJANGO_SUPERUSER_EMAIL, and
+# DJANGO_SUPERUSER_PASSWORD in the Render dashboard to activate this.
+if [ -n "$DJANGO_SUPERUSER_PASSWORD" ]; then
+  echo "==> Creating/updating superuser '${DJANGO_SUPERUSER_USERNAME:-admin}'..."
+  python - <<'EOF'
+import os, django
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", os.environ["DJANGO_SETTINGS_MODULE"])
+django.setup()
+from django.contrib.auth import get_user_model
+User = get_user_model()
+username = os.environ.get("DJANGO_SUPERUSER_USERNAME", "admin")
+email    = os.environ.get("DJANGO_SUPERUSER_EMAIL", "")
+password = os.environ["DJANGO_SUPERUSER_PASSWORD"]
+user, created = User.objects.get_or_create(username=username)
+user.email = email
+user.set_password(password)
+user.is_staff = True
+user.is_superuser = True
+user.save()
+print(f"    Superuser '{username}' {'created' if created else 'updated'}.")
+EOF
+fi
+
 echo "==> Collecting static files..."
 python manage.py collectstatic --noinput --clear
 
