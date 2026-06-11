@@ -4,7 +4,7 @@
  * Injects Authorization: Token <key> from localStorage-persisted Zustand store.
  */
 
-import type { Project, AdminUser, ReportLogo } from "./types";
+import type { Project, AdminUser, ReportLogo, ProjectLogo } from "./types";
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 
@@ -98,6 +98,12 @@ export interface ReportSummary {
   progress_pct: number;
   created_at: string;
   updated_at: string;
+  // Assignment & project fields
+  assigned_to_id?: number | null;
+  assigned_to_name?: string | null;
+  project_id?: number | null;
+  project_name?: string | null;
+  created_by_name?: string | null;
 }
 
 export interface AgentExecutionLog {
@@ -180,6 +186,12 @@ export const reports = {
 
   logs: (id: string | number) =>
     request<AgentExecutionLog[]>(`/api/reports/${id}/logs/`),
+
+  assign: (id: string | number, assignedToId: number | null) =>
+    request<ReportSummary>(`/api/reports/${id}/assign/`, {
+      method: "PATCH",
+      body: JSON.stringify({ assigned_to_id: assignedToId }),
+    }),
 };
 
 // ─── Projects ───────────────────────────────────────────────────────────────
@@ -231,7 +243,7 @@ export const admin = {
     }),
 };
 
-// ─── Logo ────────────────────────────────────────────────────────────────────
+// ─── Report logo ─────────────────────────────────────────────────────────────
 
 export const logo = {
   get: (id: string | number) =>
@@ -242,4 +254,17 @@ export const logo = {
 
   remove: (id: string | number) =>
     request<void>(`/api/reports/${id}/logo/`, { method: "DELETE" }),
+};
+
+// ─── Project logo ─────────────────────────────────────────────────────────────
+
+export const projectLogo = {
+  get: (projectId: string | number) =>
+    request<{ logo: ProjectLogo | null }>(`/api/projects/${projectId}/logo/`),
+
+  upload: (projectId: string | number, form: FormData) =>
+    request<ProjectLogo>(`/api/projects/${projectId}/logo/`, { method: "POST", body: form }),
+
+  remove: (projectId: string | number) =>
+    request<void>(`/api/projects/${projectId}/logo/`, { method: "DELETE" }),
 };

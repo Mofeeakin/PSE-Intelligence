@@ -1,10 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader, StatusPill } from "@/components/AppShell";
-import { projects as projectsApi, admin as adminApi } from "@/lib/api-client";
+import { projects as projectsApi, admin as adminApi, projectLogo as projectLogoApi } from "@/lib/api-client";
 import { useStore } from "@/lib/store";
-import type { Project, AdminUser } from "@/lib/types";
-import { ChevronLeft, UserPlus, X, Loader2, Download } from "lucide-react";
+import type { Project, AdminUser, ProjectLogo } from "@/lib/types";
+import { ChevronLeft, UserPlus, X, Loader2, Download, Image, Upload } from "lucide-react";
 import { reports as reportsApi } from "@/lib/api-client";
 
 export const Route = createFileRoute("/projects/$id")({
@@ -204,9 +204,142 @@ function ProjectDetailPage() {
               </p>
             </div>
           )}
+
+          {/* Project logo (sub_admin and super_admin) */}
+          {canManage && <ProjectLogoPanel projectId={id} />}
         </aside>
       </div>
     </>
+  );
+}
+
+const PLACEMENT_OPTIONS = [
+  { value: "cover_only",     label: "Cover page only" },
+  { value: "every_page",     label: "Every page" },
+  { value: "selected_pages", label: "Selected pages" },
+] as const;
+
+function ProjectLogoPanel({ projectId }: { projectId: string }) {
+  const [logo, setLogo]           = useState<ProjectLogo | null>(null);
+  const [preview, setPreview]     = useState<string | null>(null);
+  const [file, setFile]           = useState<File | null>(null);
+  const [placement, setPlacement] = useState<ProjectLogo["placement"]>("cover_only");
+  const [widthInches, setWidth]   = useState(2.4);
+  const [pagesInput, setPages]    = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [msg, setMsg]             = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    projectLogoApi.get(projectId).then((d) => {
+      if (d.logo) {
+        setLogo(d.logo);
+        setPlacement(d.logo.placement);
+        setWidth(d.logo.width_inches);
+        setPages((d.logo.pages ?? []).join(", "));
+        setPreview(d.logo.image_url);
+      }
+    }).catch(() => {});
+  }, [projectId]);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+  };
+
+  const handleSave = async () => {
+    setUploading(true);
+    setMsg("");
+    try {
+      const form = new FormData();
+      if (file) form.append("image", file);
+      form.append("placement", placement);
+      form.append("width_inches", String(widthInches));
+      const pages = placement === "selected_pages"
+        ? pagesInput.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n) && n > 0)
+        : [];
+      form.append("pages", JSON.stringify(pages));
+      const updated = await projectLogoApi.upload(projectId, form);
+      setLogo(updated);
+      setMsg("Project logo saved.");
+    } catch {
+      setMsg("Failed to save logo.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    try {
+      await projectLogoApi.remove(projectId);
+      setLogo(null); setPreview(null); setFile(null); setPages(""); setPlacement("cover_only");
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-sm p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="label-eyebrow">Project logo</div>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Applied to all reports in this project unless overridden per-report.</p>
+        </div>
+        {logo && (
+          <button onClick={handleRemove} className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1">
+            <X className="h-3 w-3" /> Remove
+          </button>
+        )}
+      </div>
+
+      <div onClick={() => fileRef.current?.click()}
+        className="border border-dashed border-border rounded-sm p-4 flex flex-col items-center gap-2 cursor-pointer hover:bg-accent/30 min-h-[90px]">
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        {preview
+          ? <img src={preview} alt="Logo preview" className="max-h-16 max-w-[160px] object-contain" />
+          : <><Image className="h-6 w-6 text-muted-foreground/40" /><p className="text-xs text-muted-foreground">Click to upload</p></>}
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="label-eyebrow">Placement</label>
+        <div className="grid grid-cols-1 gap-1.5">
+          {PLACEMENT_OPTIONS.map((opt) => (
+            <button key={opt.value} onClick={() => setPlacement(opt.value)}
+              className={`text-left px-3 py-2 rounded-sm border text-xs transition-colors ${
+                placement === opt.value
+                  ? "border-primary bg-primary/5 text-foreground"
+                  : "border-border text-muted-foreground hover:border-foreground/30"
+              }`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {placement === "selected_pages" && (
+        <div className="space-y-1">
+          <label className="label-eyebrow">Section numbers (comma-separated)</label>
+          <input type="text" value={pagesInput} onChange={(e) => setPages(e.target.value)}
+            placeholder="e.g. 1, 2, 3"
+            className="w-full px-3 py-1.5 text-xs bg-background border border-border rounded-sm focus:outline-none focus:border-primary font-mono" />
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <label className="label-eyebrow">Width — {widthInches.toFixed(1)}"</label>
+        <input type="range" min={1.0} max={4.0} step={0.1} value={widthInches}
+          onChange={(e) => setWidth(parseFloat(e.target.value))}
+          className="w-full accent-primary" />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button onClick={handleSave} disabled={uploading || (!file && !logo)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-sm hover:opacity-90 disabled:opacity-40">
+          <Upload className="h-3 w-3" /> {uploading ? "Saving…" : "Save logo"}
+        </button>
+        {msg && <span className="text-[11px] text-muted-foreground">{msg}</span>}
+      </div>
+    </div>
   );
 }
 
