@@ -1,7 +1,8 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { Bell, ChevronDown, ScrollText, LogOut } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Bell, ChevronDown, ScrollText, LogOut, X } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { notifications as notificationsApi, type Notification } from "@/lib/api-client";
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin",
@@ -14,7 +15,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const currentUser = useStore((s) => s.currentUser);
   const clearAuth = useStore((s) => s.clearAuth);
+  const authToken = useStore((s) => s.authToken);
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState<Notification[]>([]);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const unreadCount = notifs.filter((n) => !n.is_read).length;
+
+  useEffect(() => {
+    if (!authToken) return;
+    const fetch = () => notificationsApi.list().then(setNotifs).catch(() => {});
+    fetch();
+    const id = setInterval(fetch, 30_000);
+    return () => clearInterval(id);
+  }, [authToken]);
+
+  const markRead = (id: number) => {
+    notificationsApi.markRead(id).then((updated) =>
+      setNotifs((prev) => prev.map((n) => (n.id === id ? updated : n)))
+    ).catch(() => {});
+  };
+
+  const markAllRead = () => {
+    notificationsApi.markAllRead().then(() =>
+      setNotifs((prev) => prev.map((n) => ({ ...n, is_read: true })))
+    ).catch(() => {});
+  };
 
   const role = currentUser?.role ?? "user";
 
@@ -65,10 +92,50 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
-            <button className="ml-2 relative p-2 rounded-sm hover:bg-accent text-muted-foreground hover:text-foreground" aria-label="Notifications">
-              <Bell className="h-4 w-4" />
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
-            </button>
+            <div className="relative ml-2" ref={notifRef}>
+              <button
+                onClick={() => setNotifOpen((o) => !o)}
+                className="relative p-2 rounded-sm hover:bg-accent text-muted-foreground hover:text-foreground"
+                aria-label="Notifications"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 min-w-[16px] h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center px-0.5">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <div className="absolute right-0 top-full mt-1 w-80 bg-card border border-border rounded-sm shadow-lg z-50 max-h-96 flex flex-col">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+                    <span className="text-sm font-semibold">Notifications</span>
+                    <div className="flex items-center gap-2">
+                      {unreadCount > 0 && (
+                        <button onClick={markAllRead} className="text-xs text-primary hover:underline">Mark all read</button>
+                      )}
+                      <button onClick={() => setNotifOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                    </div>
+                  </div>
+                  <div className="overflow-y-auto flex-1">
+                    {notifs.length === 0 ? (
+                      <p className="px-4 py-6 text-sm text-muted-foreground text-center">No notifications yet.</p>
+                    ) : (
+                      notifs.map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => { markRead(n.id); if (n.report) navigate({ to: "/reports/$id", params: { id: String(n.report) } }); setNotifOpen(false); }}
+                          className={`px-4 py-3 border-b border-border last:border-0 cursor-pointer hover:bg-accent/40 transition-colors ${n.is_read ? "opacity-60" : ""}`}
+                        >
+                          <p className="text-xs leading-snug">{n.message}</p>
+                          <p className="text-[10px] text-muted-foreground mt-1 font-mono">{new Date(n.created_at).toLocaleString()}</p>
+                          {!n.is_read && <span className="inline-block mt-1 h-1.5 w-1.5 rounded-full bg-primary" />}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="relative ml-1">
               <button
                 onClick={() => setAvatarOpen((o) => !o)}
@@ -117,6 +184,8 @@ export function StatusPill({ status }: { status: string }) {
     Validation: "bg-info/15 text-[oklch(0.4_0.12_240)]",
     Scored: "bg-info/15 text-[oklch(0.4_0.12_240)]",
     Completed: "bg-success/15 text-[oklch(0.4_0.12_145)]",
+    "Pending Review": "bg-warning/15 text-[oklch(0.45_0.13_70)]",
+    Approved: "bg-success/15 text-[oklch(0.4_0.12_145)]",
     Failed: "bg-destructive/15 text-destructive",
   };
   return (

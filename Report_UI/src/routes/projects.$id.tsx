@@ -25,6 +25,9 @@ function ProjectDetailPage() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [addUserId, setAddUserId] = useState<number | "">("");
   const [addingMember, setAddingMember] = useState(false);
+  const [assigningReportId, setAssigningReportId] = useState<number | null>(null);
+  const [assignUserId, setAssignUserId] = useState<number | "">("");
+  const [assigning, setAssigning] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -44,7 +47,7 @@ function ProjectDetailPage() {
 
   useEffect(() => {
     load();
-    if (role === "super_admin") {
+    if (role === "super_admin" || role === "sub_admin") {
       adminApi.listUsers().then(setAllUsers).catch(() => {});
     }
   }, [id, role]);
@@ -72,6 +75,16 @@ function ProjectDetailPage() {
       const updated = await projectsApi.update(id, { status: newStatus }) as unknown as Project;
       setProject(updated);
     } catch { /* ignore */ }
+  };
+
+  const handleAssignReport = async () => {
+    if (!assigningReportId || !assignUserId) return;
+    setAssigning(true);
+    try {
+      await reportsApi.assign(assigningReportId, Number(assignUserId));
+      setAssigningReportId(null);
+      setAssignUserId("");
+    } catch { /* ignore */ } finally { setAssigning(false); }
   };
 
   if (loading) return (
@@ -119,21 +132,57 @@ function ProjectDetailPage() {
                   </thead>
                   <tbody>
                     {projectReports.map((r) => (
-                      <tr key={r.id} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors">
-                        <td className="px-6 py-3 font-medium">{r.title}</td>
-                        <td className="px-3 py-3"><StatusPill status={r.status} /></td>
-                        <td className="px-3 py-3 text-xs text-muted-foreground font-mono">{new Date(r.updated_at).toLocaleDateString()}</td>
-                        <td className="px-6 py-3 text-right">
-                          <div className="inline-flex gap-1">
-                            <button onClick={() => navigate({ to: "/reports/$id", params: { id: String(r.id) } })}
-                              className="px-2.5 py-1.5 text-xs rounded-sm hover:bg-accent border border-transparent hover:border-border">View</button>
-                            <button onClick={() => navigate({ to: "/reports/$id/export", params: { id: String(r.id) } })}
-                              className="px-2.5 py-1.5 text-xs rounded-sm hover:bg-accent border border-transparent hover:border-border inline-flex items-center gap-1">
-                              <Download className="h-3 w-3" /> Export
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      <>
+                        <tr key={r.id} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors">
+                          <td className="px-6 py-3 font-medium">{r.title}</td>
+                          <td className="px-3 py-3"><StatusPill status={r.status} /></td>
+                          <td className="px-3 py-3 text-xs text-muted-foreground font-mono">{new Date(r.updated_at).toLocaleDateString()}</td>
+                          <td className="px-6 py-3 text-right">
+                            <div className="inline-flex gap-1">
+                              <button onClick={() => navigate({ to: "/reports/$id", params: { id: String(r.id) } })}
+                                className="px-2.5 py-1.5 text-xs rounded-sm hover:bg-accent border border-transparent hover:border-border">View</button>
+                              {canManage && (
+                                <button
+                                  onClick={() => setAssigningReportId(assigningReportId === r.id ? null : r.id)}
+                                  className="px-2.5 py-1.5 text-xs rounded-sm hover:bg-accent border border-transparent hover:border-border inline-flex items-center gap-1">
+                                  Assign
+                                </button>
+                              )}
+                              <button onClick={() => navigate({ to: "/reports/$id/export", params: { id: String(r.id) } })}
+                                className="px-2.5 py-1.5 text-xs rounded-sm hover:bg-accent border border-transparent hover:border-border inline-flex items-center gap-1">
+                                <Download className="h-3 w-3" /> Export
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {assigningReportId === r.id && (
+                          <tr key={`assign-${r.id}`} className="border-b border-border bg-accent/20">
+                            <td colSpan={4} className="px-6 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground shrink-0">Assign to:</span>
+                                <select
+                                  value={assignUserId}
+                                  onChange={(e) => setAssignUserId(Number(e.target.value) || "")}
+                                  className="flex-1 text-sm bg-background border border-border rounded-sm px-2 py-1 focus:outline-none"
+                                >
+                                  <option value="">Select staff member…</option>
+                                  {allUsers.map((u) => (
+                                    <option key={u.id} value={u.id}>{u.username} ({u.role})</option>
+                                  ))}
+                                </select>
+                                <button onClick={handleAssignReport} disabled={!assignUserId || assigning}
+                                  className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded-sm disabled:opacity-40">
+                                  {assigning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Assign"}
+                                </button>
+                                <button onClick={() => { setAssigningReportId(null); setAssignUserId(""); }}
+                                  className="p-1 text-muted-foreground hover:text-foreground">
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     ))}
                   </tbody>
                 </table>
@@ -148,6 +197,10 @@ function ProjectDetailPage() {
           <div className="bg-card border border-border rounded-sm p-5 space-y-3">
             <div className="label-eyebrow mb-1">Project info</div>
             <Row label="Client" value={project.client_name} />
+            <Row label="Standard" value={project.standard_name ?? "—"} />
+            {project.report_types?.length > 0 && (
+              <Row label="Report types" value={project.report_types.map((t) => t === "audit_report" ? "Audit" : "Gap Assessment").join(", ")} />
+            )}
             <Row label="Created by" value={project.created_by_name ?? "—"} />
             <Row label="Reports" value={String(project.report_count)} />
             <Row label="Members" value={String(project.member_count)} />
@@ -169,8 +222,8 @@ function ProjectDetailPage() {
             </div>
           </div>
 
-          {/* Members (super_admin can manage) */}
-          {role === "super_admin" && (
+          {/* Members (super_admin and sub_admin can manage) */}
+          {(role === "super_admin" || role === "sub_admin") && (
             <div className="bg-card border border-border rounded-sm p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="label-eyebrow">Members</div>

@@ -57,6 +57,8 @@ class Report(models.Model):
     STATUS_VALIDATION = "Validation"
     STATUS_SCORED = "Scored"
     STATUS_COMPLETED = "Completed"
+    STATUS_PENDING_REVIEW = "Pending Review"
+    STATUS_APPROVED = "Approved"
     STATUS_FAILED = "Failed"
     STATUS_CHOICES = [
         (STATUS_DRAFT, "Draft"),
@@ -64,6 +66,8 @@ class Report(models.Model):
         (STATUS_VALIDATION, "Validation"),
         (STATUS_SCORED, "Scored"),
         (STATUS_COMPLETED, "Completed"),
+        (STATUS_PENDING_REVIEW, "Pending Review"),
+        (STATUS_APPROVED, "Approved"),
         (STATUS_FAILED, "Failed"),
     ]
 
@@ -251,6 +255,7 @@ class Project(models.Model):
     client_details   = models.TextField(blank=True)
     description      = models.TextField(blank=True)
     standard         = models.ForeignKey(Standard, on_delete=models.SET_NULL, null=True, blank=True)
+    report_types     = models.JSONField(default=list, blank=True)
     created_by       = models.ForeignKey(User, on_delete=models.CASCADE, related_name="created_projects")
     assigned_members = models.ManyToManyField(User, related_name="member_projects", blank=True)
     status           = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)

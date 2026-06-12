@@ -1,13 +1,16 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { useStore } from "@/lib/store";
 import { reports as reportsApi, ApiError } from "@/lib/api-client";
 import type { ReportType, ServiceType, EvidenceFile } from "@/lib/types";
-import { ArrowRight, ArrowLeft, Upload, X, FileText, ShieldCheck, BookOpen, CreditCard, Lock, Sparkles, ClipboardList, Search } from "lucide-react";
+import { ArrowRight, ArrowLeft, Upload, X, FileText, ShieldCheck, BookOpen, CreditCard, Lock, Sparkles, ClipboardList, Search, Save, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/wizard")({
   head: () => ({ meta: [{ title: "New Report — Compliance Intelligence" }] }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    draft: typeof search.draft === "string" ? search.draft : undefined,
+  }),
   component: Wizard,
 });
 
@@ -35,39 +38,84 @@ const SERVICE_TYPE_META: Record<ServiceType, { icon: React.ComponentType<{classN
 
 function Wizard() {
   const navigate = useNavigate();
+  const { draft: draftQuery } = useSearch({ from: "/wizard" });
   const { draft, setDraft, resetDraft, addEvidence, removeEvidence, initQuestionnaire, setAnswer, generate } = useStore();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState<number | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Load existing draft when ?draft=<id> is present
   useEffect(() => {
-    // start fresh if user lands cold
-    if (!draft.type && step !== 0) setStep(0);
+    if (!draftQuery) return;
+    reportsApi.get(draftQuery).then((r) => {
+      setSavedId(r.id);
+      setDraft({
+        title: r.title,
+        organization: r.organisation,
+        department: r.department ?? "",
+        scope: r.scope ?? "",
+        serviceType: (r.service_type as ServiceType) ?? undefined,
+      });
+      if (r.sections?.length > 0) setStep(4);
+    }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [draftQuery]);
 
   const next = () => setStep((s) => Math.min(STEPS.length - 1, s + 1));
   const prev = () => setStep((s) => Math.max(0, s - 1));
+
+  const buildPayload = (generate: boolean) => ({
+    title: draft.title || "Untitled Report",
+    organisation: draft.organization,
+    department: draft.department,
+    standard_code: "ISO27001",
+    scope: draft.scope,
+    service_type: draft.serviceType,
+    submissions: [],
+    wizard_answers: draft.questionnaire,
+    ...(generate ? {} : { generate: false }),
+  });
+
+  const saveDraft = async () => {
+    setSaving(true);
+    setSaveFeedback(null);
+    try {
+      if (savedId) {
+        await reportsApi.update(savedId, buildPayload(false));
+      } else {
+        const created = await reportsApi.create(buildPayload(false));
+        setSavedId(created.id);
+      }
+      setSaveFeedback("Draft saved");
+      setTimeout(() => setSaveFeedback(null), 2500);
+    } catch {
+      setSaveFeedback("Save failed");
+      setTimeout(() => setSaveFeedback(null), 2500);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const submit = async () => {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const payload = {
-        title: draft.title || "Untitled Report",
-        organisation: draft.organization,
-        department: draft.department,
-        standard_code: "ISO27001",
-        scope: draft.scope,
-        service_type: draft.serviceType,
-        submissions: [],
-        wizard_answers: draft.questionnaire,
-      };
-      const created = await reportsApi.create(payload);
-      // Keep a local shadow record for the UI (status will be polled)
+      let reportId: number;
+      if (savedId) {
+        await reportsApi.update(savedId, buildPayload(false));
+        await reportsApi.generate(savedId);
+        reportId = savedId;
+      } else {
+        const created = await reportsApi.create(buildPayload(true));
+        reportId = created.id;
+      }
       generate();
       resetDraft();
-      navigate({ to: "/processing/$id", params: { id: String(created.id) } });
+      setSavedId(null);
+      navigate({ to: "/processing/$id", params: { id: String(reportId) } });
     } catch (err) {
       if (err instanceof ApiError) {
         setSubmitError(err.message);
@@ -182,32 +230,51 @@ function Wizard() {
             </Section>
           )}
 
-          <div className="mt-8 flex items-center justify-between">
+          <div className="mt-8 flex items-center justify-between gap-4">
             <button onClick={prev} disabled={step === 0}
               className="inline-flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30">
               <ArrowLeft className="h-4 w-4" /> Back
             </button>
-            {step < STEPS.length - 1 ? (
-              <button onClick={next} disabled={!canAdvance(step, draft)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90 disabled:opacity-40">
-                {step === 3 ? "Next: Questionnaire" : "Continue"} <ArrowRight className="h-4 w-4" />
-              </button>
-            ) : (
-              <div className="flex flex-col items-end gap-2">
-                {submitError && (
-                  <p className="text-xs text-destructive">{submitError}</p>
-                )}
-                <button onClick={submit} disabled={submitting}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90 disabled:opacity-60">
-                  <Sparkles className="h-4 w-4" /> {submitting ? "Submitting…" : "Generate Report"}
+
+            <div className="flex items-center gap-3 ml-auto">
+              {/* Save Draft button — visible from step 1 onward */}
+              {step >= 1 && (
+                <div className="flex items-center gap-2">
+                  {saveFeedback && (
+                    <span className={`text-xs font-mono ${saveFeedback === "Draft saved" ? "text-[oklch(0.4_0.12_145)]" : "text-destructive"}`}>
+                      {saveFeedback}
+                    </span>
+                  )}
+                  <button onClick={saveDraft} disabled={saving}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded-sm hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-40">
+                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    {savedId ? "Save Changes" : "Save Draft"}
+                  </button>
+                </div>
+              )}
+
+              {step < STEPS.length - 1 ? (
+                <button onClick={next} disabled={!canAdvance(step, draft)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90 disabled:opacity-40">
+                  {step === 3 ? "Next: Questionnaire" : "Continue"} <ArrowRight className="h-4 w-4" />
                 </button>
-              </div>
-            )}
+              ) : (
+                <div className="flex flex-col items-end gap-2">
+                  {submitError && (
+                    <p className="text-xs text-destructive">{submitError}</p>
+                  )}
+                  <button onClick={submit} disabled={submitting}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90 disabled:opacity-60">
+                    <Sparkles className="h-4 w-4" /> {submitting ? "Submitting…" : "Generate Report"}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <aside className="col-span-12 lg:col-span-4">
-          <DraftSummary />
+          <DraftSummary savedId={savedId} />
         </aside>
       </div>
     </>
@@ -417,11 +484,18 @@ function EvidenceStep({ evidence, onAdd, onRemove }: {
   );
 }
 
-function DraftSummary() {
+function DraftSummary({ savedId }: { savedId: number | null }) {
   const draft = useStore((s) => s.draft);
   return (
     <div className="bg-card border border-border rounded-sm p-5 sticky top-24">
-      <div className="label-eyebrow mb-3">Draft summary</div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="label-eyebrow">Draft summary</div>
+        {savedId && (
+          <span className="text-[10px] font-mono text-[oklch(0.4_0.12_145)] bg-[oklch(0.4_0.12_145)]/10 px-1.5 py-0.5 rounded-sm">
+            Saved #{savedId}
+          </span>
+        )}
+      </div>
       <dl className="space-y-3 text-sm">
         <SumRow k="Type" v={draft.type ?? "—"} mono />
         <SumRow k="Title" v={draft.title || "—"} />

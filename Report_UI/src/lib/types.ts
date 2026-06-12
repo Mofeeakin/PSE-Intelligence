@@ -1,6 +1,6 @@
 export type ReportType = "ISO 27001" | "ISO 9001" | "NDPA" | "PCI DSS";
 export type ServiceType = "audit_report" | "gap_assessment";
-export type ReportStatus = "Draft" | "Processing" | "Validation" | "Scored" | "Completed" | "Failed";
+export type ReportStatus = "Draft" | "Processing" | "Validation" | "Scored" | "Completed" | "Pending Review" | "Approved" | "Failed";
 export type AgentName = "Router" | "RAG" | "ISO Agent" | "Conflict Checker" | "Validator" | "Scorer";
 
 export interface EvidenceFile {
@@ -96,6 +96,8 @@ export interface Project {
   description: string;
   status: "active" | "completed" | "archived";
   standard: number | null;
+  standard_name: string | null;
+  report_types: string[];
   created_by: number;
   created_by_name: string;
   member_count: number;

@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
-import { admin as adminApi } from "@/lib/api-client";
+import { admin as adminApi, type CreateUserPayload, type CreateUserResponse } from "@/lib/api-client";
 import { useStore } from "@/lib/store";
 import type { AdminUser } from "@/lib/types";
-import { Loader2, Shield, Users } from "lucide-react";
+import { Loader2, Shield, Users, UserPlus, X, Copy, Check, Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Admin — Compliance Intelligence" }] }),
@@ -23,6 +23,159 @@ const ROLE_BADGE: Record<string, string> = {
   user:        "bg-muted text-muted-foreground",
 };
 
+// ── Create User Modal ────────────────────────────────────────────────────────
+
+function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: (result: CreateUserResponse) => void }) {
+  const [form, setForm] = useState<CreateUserPayload>({
+    username: "", email: "", first_name: "", last_name: "", password: "", role: "user",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const set = (k: keyof CreateUserPayload) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!form.username.trim() || !form.email.trim()) { setError("Username and email are required."); return; }
+    setSaving(true);
+    try {
+      const result = await adminApi.createUser({ ...form, password: form.password?.trim() || undefined });
+      onCreated(result);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create user.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md bg-card border border-border rounded-sm shadow-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="font-display text-base font-semibold">Create New User</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+        </div>
+
+        <form onSubmit={submit} className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Username *" id="username" value={form.username} onChange={set("username")} autoComplete="off" />
+            <Field label="Email *" id="email" type="email" value={form.email} onChange={set("email")} autoComplete="off" />
+            <Field label="First Name" id="first_name" value={form.first_name ?? ""} onChange={set("first_name")} />
+            <Field label="Last Name" id="last_name" value={form.last_name ?? ""} onChange={set("last_name")} />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Role</label>
+            <select value={form.role} onChange={set("role")}
+              className="w-full px-3 py-2 rounded-sm border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+              {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Password <span className="normal-case font-normal text-muted-foreground">(leave blank to auto-generate)</span>
+            </label>
+            <input id="password" type="password" value={form.password ?? ""} onChange={set("password")} autoComplete="new-password"
+              placeholder="Minimum 8 characters"
+              className="w-full px-3 py-2 rounded-sm border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+          </div>
+
+          {error && <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-sm px-3 py-2">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-sm">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-sm disabled:opacity-60 flex items-center gap-2">
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Create User
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, id, type = "text", value, onChange, autoComplete, placeholder }:
+  { label: string; id: string; type?: string; value: string; onChange: React.ChangeEventHandler<HTMLInputElement>; autoComplete?: string; placeholder?: string }) {
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</label>
+      <input id={id} type={type} value={value} onChange={onChange} autoComplete={autoComplete} placeholder={placeholder}
+        className="w-full px-3 py-2 rounded-sm border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+    </div>
+  );
+}
+
+// ── Credentials Dialog ───────────────────────────────────────────────────────
+
+function CredentialsDialog({ result, onClose }: { result: CreateUserResponse; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
+
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+
+  const credential = `Username: ${result.user.username}\nPassword: ${result.generated_password ?? "(set by admin)"}`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm bg-card border border-border rounded-sm shadow-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="font-display text-base font-semibold">User Created</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-muted-foreground">Share these credentials with the staff member. The password will not be shown again.</p>
+
+          <div className="bg-muted/50 border border-border rounded-sm p-4 font-mono text-sm space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground text-xs uppercase tracking-wider">Username</span>
+              <span className="font-medium">{result.user.username}</span>
+            </div>
+            {result.generated_password && (
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground text-xs uppercase tracking-wider">Password</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{showPwd ? result.generated_password : "••••••••••••"}</span>
+                  <button onClick={() => setShowPwd((v) => !v)} className="text-muted-foreground hover:text-foreground">
+                    {showPwd ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground text-xs uppercase tracking-wider">Role</span>
+              <span className="font-medium capitalize">{result.user.role.replace("_", " ")}</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button onClick={() => copy(credential)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded-sm hover:bg-accent">
+              {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Copied!" : "Copy credentials"}
+            </button>
+            <button onClick={onClose}
+              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-sm">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Admin Page ───────────────────────────────────────────────────────────────
+
 function AdminPage() {
   const currentUser = useStore((s) => s.currentUser);
   const role = currentUser?.role ?? "user";
@@ -30,13 +183,18 @@ function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<number | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [credentials, setCredentials] = useState<CreateUserResponse | null>(null);
 
-  useEffect(() => {
+  const loadUsers = () => {
+    setLoading(true);
     adminApi.listUsers()
       .then(setUsers)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { loadUsers(); }, []);
 
   const handleRoleChange = async (userId: number, newRole: AdminUser["role"]) => {
     setSaving(userId);
@@ -44,6 +202,12 @@ function AdminPage() {
       const updated = await adminApi.setRole(userId, newRole);
       setUsers((prev) => prev.map((u) => u.id === userId ? updated : u));
     } catch { /* ignore */ } finally { setSaving(null); }
+  };
+
+  const handleCreated = (result: CreateUserResponse) => {
+    setShowCreate(false);
+    setCredentials(result);
+    loadUsers();
   };
 
   if (role !== "super_admin") {
@@ -61,7 +225,14 @@ function AdminPage() {
       <PageHeader
         eyebrow="System administration"
         title="Admin Panel"
-        description="Manage user roles and system access for all staff. Changes take effect on next login."
+        description="Manage user roles and create new accounts for staff. Credentials are shared by the admin."
+        actions={
+          <button onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90 transition-opacity">
+            <UserPlus className="h-4 w-4" />
+            Create User
+          </button>
+        }
       />
 
       <div className="grid grid-cols-12 gap-8">
@@ -151,6 +322,9 @@ function AdminPage() {
           </div>
         </aside>
       </div>
+
+      {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} onCreated={handleCreated} />}
+      {credentials && <CredentialsDialog result={credentials} onClose={() => setCredentials(null)} />}
     </>
   );
 }

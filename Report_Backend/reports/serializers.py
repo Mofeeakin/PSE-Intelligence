@@ -133,12 +133,14 @@ class ProjectSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     member_count    = serializers.SerializerMethodField()
     report_count    = serializers.SerializerMethodField()
+    standard_name   = serializers.SerializerMethodField()
 
     class Meta:
         model  = Project
         fields = [
             "id", "name", "client_name", "client_details", "description",
-            "status", "standard", "created_by", "created_by_name",
+            "status", "standard", "standard_name", "report_types",
+            "created_by", "created_by_name",
             "member_count", "report_count", "created_at", "updated_at",
         ]
         read_only_fields = ["created_by", "created_at", "updated_at"]
@@ -152,6 +154,9 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     def get_report_count(self, obj):
         return obj.reports.count()
+
+    def get_standard_name(self, obj):
+        return obj.standard.name if obj.standard else None
 
 
 class ProjectMemberSerializer(serializers.Serializer):

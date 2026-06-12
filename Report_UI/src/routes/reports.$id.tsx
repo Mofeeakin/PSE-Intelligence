@@ -1,9 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader, ScoreBadge, StatusPill } from "@/components/AppShell";
 import { FindingsTable } from "@/components/FindingsTable";
 import { useStore } from "@/lib/store";
-import { AlertTriangle, CheckCircle2, FileText, RefreshCw, Download, ChevronRight, Sparkles, ShieldAlert, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileText, RefreshCw, Download, ChevronRight, Sparkles, ShieldAlert, Loader2, ImageIcon, X, ChevronDown } from "lucide-react";
+import { reports as reportsApi, logo as logoApi } from "@/lib/api-client";
+import type { ReportLogo } from "@/lib/types";
 
 export const Route = createFileRoute("/reports/$id")({
   head: () => ({ meta: [{ title: "Report — Compliance Intelligence" }] }),
@@ -17,7 +19,10 @@ function Viewer() {
   const loadReport = useStore((s) => s.loadReport);
   const revalidate = useStore((s) => s.revalidate);
   const rescore = useStore((s) => s.rescore);
+  const currentUser = useStore((s) => s.currentUser);
+  const role = currentUser?.role ?? "user";
   const [fetching, setFetching] = useState(!report);
+  const [workflowBusy, setWorkflowBusy] = useState(false);
 
   useEffect(() => {
     setFetching(true);
@@ -195,16 +200,52 @@ function Viewer() {
                 className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm border border-border rounded-sm hover:bg-accent">
                 <RefreshCw className="h-3.5 w-3.5" /> Re-Score
               </button>
-              <Link to="/reports/$id/export" params={{ id: report.id }}
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-sm hover:opacity-90">
-                <Download className="h-3.5 w-3.5" /> Export Report
-              </Link>
+
+              {/* Submit for Review — staff only, Completed reports */}
+              {report.status === "Completed" && (
+                <button
+                  disabled={workflowBusy}
+                  onClick={async () => {
+                    setWorkflowBusy(true);
+                    try { await reportsApi.submitReview(report.id); loadReport(report.id); }
+                    catch { /* ignore */ } finally { setWorkflowBusy(false); }
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm bg-warning/10 text-[oklch(0.45_0.13_70)] border border-warning/30 rounded-sm hover:bg-warning/20 disabled:opacity-50">
+                  {workflowBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  Submit for Review
+                </button>
+              )}
+
+              {/* Approve — admins only, Pending Review reports */}
+              {report.status === "Pending Review" && (role === "super_admin" || role === "sub_admin") && (
+                <button
+                  disabled={workflowBusy}
+                  onClick={async () => {
+                    setWorkflowBusy(true);
+                    try { await reportsApi.approve(report.id); loadReport(report.id); }
+                    catch { /* ignore */ } finally { setWorkflowBusy(false); }
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm bg-success/10 text-[oklch(0.4_0.12_145)] border border-success/30 rounded-sm hover:bg-success/20 disabled:opacity-50">
+                  {workflowBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  Approve Report
+                </button>
+              )}
+
+              {["Completed", "Approved"].includes(report.status) && (
+                <Link to="/reports/$id/export" params={{ id: report.id }}
+                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-sm hover:opacity-90">
+                  <Download className="h-3.5 w-3.5" /> Export Report
+                </Link>
+              )}
               <Link to="/transparency"
                 className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm border border-border rounded-sm hover:bg-accent">
                 AI Transparency
               </Link>
             </div>
           </div>
+
+          {/* Logo Settings */}
+          <LogoPanel reportId={id} />
         </aside>
       </div>
     </>
@@ -221,6 +262,149 @@ function ScoreRow({ label, v }: { label: string; v: number }) {
       <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
         <div className="h-full bg-foreground/80" style={{ width: `${v}%` }} />
       </div>
+    </div>
+  );
+}
+
+// ── Logo Panel ────────────────────────────────────────────────────────────────
+
+function LogoPanel({ reportId }: { reportId: string }) {
+  const [open, setOpen] = useState(false);
+  const [existing, setExisting] = useState<ReportLogo | null>(null);
+  const [placement, setPlacement] = useState<"cover_only" | "every_page" | "selected_pages">("cover_only");
+  const [widthInches, setWidthInches] = useState(2.4);
+  const [pages, setPages] = useState<number[]>([]);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    logoApi.get(reportId).then((res) => {
+      const logo = (res as { logo?: ReportLogo }).logo ?? null;
+      setExisting(logo);
+      if (logo) {
+        setPlacement(logo.placement);
+        setWidthInches(logo.width_inches);
+        setPages(logo.pages ?? []);
+        setPreview(logo.image_url);
+      }
+    }).catch(() => {});
+  }, [open, reportId]);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+  };
+
+  const handleSave = async () => {
+    if (!file && !existing) return;
+    setSaving(true);
+    try {
+      const form = new FormData();
+      if (file) form.append("image", file);
+      form.append("placement", placement);
+      form.append("width_inches", String(widthInches));
+      form.append("pages", JSON.stringify(pages));
+      const logo = await logoApi.upload(reportId, form);
+      setExisting(logo);
+      setFile(null);
+    } catch { /* ignore */ } finally { setSaving(false); }
+  };
+
+  const handleRemove = async () => {
+    setRemoving(true);
+    try {
+      await logoApi.remove(reportId);
+      setExisting(null);
+      setFile(null);
+      setPreview(null);
+    } catch { /* ignore */ } finally { setRemoving(false); }
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-sm">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full px-5 py-3.5 flex items-center justify-between text-sm font-medium hover:bg-accent/40 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <ImageIcon className="h-4 w-4 text-muted-foreground" />
+          Logo Settings
+        </div>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 space-y-4 border-t border-border pt-4">
+          {/* Upload area */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">Logo Image</label>
+            {preview ? (
+              <div className="relative inline-block">
+                <img src={preview} alt="Logo preview" className="h-16 object-contain border border-border rounded-sm bg-muted/30 p-1" />
+                <button onClick={() => { setFile(null); setPreview(null); if (fileRef.current) fileRef.current.value = ""; }}
+                  className="absolute -top-1.5 -right-1.5 bg-card border border-border rounded-full p-0.5 hover:bg-accent">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => fileRef.current?.click()}
+                className="w-full border-2 border-dashed border-border rounded-sm py-6 text-sm text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors text-center">
+                Click to upload logo (PNG/JPG, max 2MB)
+              </button>
+            )}
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleFile} />
+          </div>
+
+          {/* Placement */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">Placement</label>
+            <div className="grid grid-cols-1 gap-1.5">
+              {([
+                ["cover_only", "Cover page only"],
+                ["every_page", "Every page header"],
+                ["selected_pages", "Selected pages"],
+              ] as const).map(([val, label]) => (
+                <label key={val} className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input type="radio" name="placement" value={val} checked={placement === val}
+                    onChange={() => setPlacement(val)} className="accent-primary" />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Width */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">
+              Width: {widthInches.toFixed(1)} inches
+            </label>
+            <input type="range" min={1} max={3.5} step={0.1} value={widthInches}
+              onChange={(e) => setWidthInches(parseFloat(e.target.value))}
+              className="w-full accent-primary" />
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <button onClick={handleSave} disabled={saving || (!file && !existing)}
+              className="flex-1 py-2 text-sm bg-primary text-primary-foreground rounded-sm disabled:opacity-50 inline-flex items-center justify-center gap-1.5">
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {existing ? "Update Logo" : "Save Logo"}
+            </button>
+            {existing && (
+              <button onClick={handleRemove} disabled={removing}
+                className="px-3 py-2 text-sm border border-destructive/30 text-destructive rounded-sm hover:bg-destructive/10 disabled:opacity-50">
+                {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

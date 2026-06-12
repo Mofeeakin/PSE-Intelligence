@@ -60,13 +60,21 @@ export interface AuthPayload {
   user: { id: number; username: string; email: string; first_name: string; last_name: string; role: "super_admin" | "sub_admin" | "user" };
 }
 
-export const auth = {
-  register: (username: string, email: string, password: string) =>
-    request<AuthPayload>("/api/auth/register/", {
-      method: "POST",
-      body: JSON.stringify({ username, email, password }),
-    }),
+export interface CreateUserPayload {
+  username: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  password?: string;
+  role?: "super_admin" | "sub_admin" | "user";
+}
 
+export interface CreateUserResponse {
+  user: AuthPayload["user"];
+  generated_password?: string;
+}
+
+export const auth = {
   login: (username: string, password: string) =>
     request<AuthPayload>("/api/auth/login/", {
       method: "POST",
@@ -162,6 +170,12 @@ export const reports = {
       body: JSON.stringify(payload),
     }),
 
+  update: (id: string | number, payload: Partial<CreateReportPayload>) =>
+    request<ReportSummary>(`/api/reports/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
   get: (id: string | number) => request<ReportDetail>(`/api/reports/${id}/`),
 
   status: (id: string | number) => request<ReportStatus>(`/api/reports/${id}/status/`),
@@ -175,6 +189,21 @@ export const reports = {
   rescore: (id: string | number) =>
     request<Record<string, unknown>>(`/api/reports/${id}/rescore/`, { method: "POST" }),
 
+  generate: (id: string | number) =>
+    request<{ detail: string }>(`/api/reports/${id}/generate/`, { method: "POST" }),
+
+  submitReview: (id: string | number) =>
+    request<{ detail: string }>(`/api/reports/${id}/submit_review/`, { method: "POST" }),
+
+  approve: (id: string | number) =>
+    request<{ detail: string }>(`/api/reports/${id}/approve/`, { method: "POST" }),
+
+  assign: (id: string | number, userId: number) =>
+    request<ReportSummary>(`/api/reports/${id}/assign/`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    }),
+
   exportUrl: (id: string | number, format: "docx" | "pdf") =>
     `${BASE_URL}/api/reports/${id}/export/?format=${format}&token=${getToken() ?? ""}`,
 
@@ -182,7 +211,37 @@ export const reports = {
     request<AgentExecutionLog[]>(`/api/reports/${id}/logs/`),
 };
 
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+export interface Notification {
+  id: number;
+  message: string;
+  report: number | null;
+  report_title?: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export const notifications = {
+  list: () => request<Notification[]>("/api/auth/notifications/"),
+
+  markRead: (id: number) =>
+    request<Notification>(`/api/auth/notifications/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_read: true }),
+    }),
+
+  markAllRead: () =>
+    request<{ detail: string }>("/api/auth/notifications/", { method: "POST" }),
+};
+
 // ─── Projects ───────────────────────────────────────────────────────────────
+
+export interface Standard {
+  id: number;
+  code: string;
+  name: string;
+}
 
 export interface CreateProjectPayload {
   name: string;
@@ -190,7 +249,13 @@ export interface CreateProjectPayload {
   client_details?: string;
   description?: string;
   status?: "active" | "completed" | "archived";
+  standard?: number | null;
+  report_types?: string[];
 }
+
+export const standards = {
+  list: () => request<Standard[]>("/api/standards/"),
+};
 
 export const projects = {
   list: () => request<Project[]>("/api/projects/"),
@@ -228,6 +293,12 @@ export const admin = {
     request<AdminUser>(`/api/auth/users/${userId}/role/`, {
       method: "PATCH",
       body: JSON.stringify({ role }),
+    }),
+
+  createUser: (payload: CreateUserPayload) =>
+    request<CreateUserResponse>("/api/auth/register/", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 };
 

@@ -11,30 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WizardRouteImport } from './routes/wizard'
 import { Route as TransparencyRouteImport } from './routes/transparency'
+import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ReportsIdRouteImport } from './routes/reports.$id'
+import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
 import { Route as ProcessingIdRouteImport } from './routes/processing.$id'
 import { Route as ReportsIdExportRouteImport } from './routes/reports.$id.export'
-import { Route as ProjectsRouteImport } from './routes/projects'
-import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
-import { Route as AdminRouteImport } from './routes/admin'
 
-const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProjectsRoute = ProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProjectsIdRoute = ProjectsIdRouteImport.update({
-  id: '/projects/$id',
-  path: '/projects/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const WizardRoute = WizardRouteImport.update({
   id: '/wizard',
   path: '/wizard',
@@ -45,9 +30,19 @@ const TransparencyRoute = TransparencyRouteImport.update({
   path: '/transparency',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsRoute = ProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -59,6 +54,11 @@ const ReportsIdRoute = ReportsIdRouteImport.update({
   id: '/reports/$id',
   path: '/reports/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsIdRoute = ProjectsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ProjectsRoute,
 } as any)
 const ProcessingIdRoute = ProcessingIdRouteImport.update({
   id: '/processing/$id',
@@ -73,38 +73,38 @@ const ReportsIdExportRoute = ReportsIdExportRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
+  '/projects': typeof ProjectsRouteWithChildren
   '/transparency': typeof TransparencyRoute
   '/wizard': typeof WizardRoute
-  '/projects': typeof ProjectsRoute
-  '/projects/$id': typeof ProjectsIdRoute
-  '/admin': typeof AdminRoute
   '/processing/$id': typeof ProcessingIdRoute
+  '/projects/$id': typeof ProjectsIdRoute
   '/reports/$id': typeof ReportsIdRouteWithChildren
   '/reports/$id/export': typeof ReportsIdExportRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
+  '/projects': typeof ProjectsRouteWithChildren
   '/transparency': typeof TransparencyRoute
   '/wizard': typeof WizardRoute
-  '/projects': typeof ProjectsRoute
-  '/projects/$id': typeof ProjectsIdRoute
-  '/admin': typeof AdminRoute
   '/processing/$id': typeof ProcessingIdRoute
+  '/projects/$id': typeof ProjectsIdRoute
   '/reports/$id': typeof ReportsIdRouteWithChildren
   '/reports/$id/export': typeof ReportsIdExportRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
+  '/projects': typeof ProjectsRouteWithChildren
   '/transparency': typeof TransparencyRoute
   '/wizard': typeof WizardRoute
-  '/projects': typeof ProjectsRoute
-  '/projects/$id': typeof ProjectsIdRoute
-  '/admin': typeof AdminRoute
   '/processing/$id': typeof ProcessingIdRoute
+  '/projects/$id': typeof ProjectsIdRoute
   '/reports/$id': typeof ReportsIdRouteWithChildren
   '/reports/$id/export': typeof ReportsIdExportRoute
 }
@@ -112,49 +112,48 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/login'
+    | '/projects'
     | '/transparency'
     | '/wizard'
-    | '/projects'
-    | '/projects/$id'
-    | '/admin'
     | '/processing/$id'
+    | '/projects/$id'
     | '/reports/$id'
     | '/reports/$id/export'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
     | '/login'
+    | '/projects'
     | '/transparency'
     | '/wizard'
-    | '/projects'
-    | '/projects/$id'
-    | '/admin'
     | '/processing/$id'
+    | '/projects/$id'
     | '/reports/$id'
     | '/reports/$id/export'
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/login'
+    | '/projects'
     | '/transparency'
     | '/wizard'
-    | '/projects'
-    | '/projects/$id'
-    | '/admin'
     | '/processing/$id'
+    | '/projects/$id'
     | '/reports/$id'
     | '/reports/$id/export'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   LoginRoute: typeof LoginRoute
+  ProjectsRoute: typeof ProjectsRouteWithChildren
   TransparencyRoute: typeof TransparencyRoute
   WizardRoute: typeof WizardRoute
-  ProjectsRoute: typeof ProjectsRoute
-  ProjectsIdRoute: typeof ProjectsIdRoute
-  AdminRoute: typeof AdminRoute
   ProcessingIdRoute: typeof ProcessingIdRoute
   ReportsIdRoute: typeof ReportsIdRouteWithChildren
 }
@@ -175,20 +174,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TransparencyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/projects': {
       id: '/projects'
       path: '/projects'
@@ -196,11 +181,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/projects/$id': {
-      id: '/projects/$id'
-      path: '/projects/$id'
-      fullPath: '/projects/$id'
-      preLoaderRoute: typeof ProjectsIdRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -210,12 +195,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reports/$id': {
       id: '/reports/$id'
       path: '/reports/$id'
       fullPath: '/reports/$id'
       preLoaderRoute: typeof ReportsIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/projects/$id': {
+      id: '/projects/$id'
+      path: '/$id'
+      fullPath: '/projects/$id'
+      preLoaderRoute: typeof ProjectsIdRouteImport
+      parentRoute: typeof ProjectsRoute
     }
     '/processing/$id': {
       id: '/processing/$id'
@@ -234,6 +233,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ProjectsRouteChildren {
+  ProjectsIdRoute: typeof ProjectsIdRoute
+}
+
+const ProjectsRouteChildren: ProjectsRouteChildren = {
+  ProjectsIdRoute: ProjectsIdRoute,
+}
+
+const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
+  ProjectsRouteChildren,
+)
+
 interface ReportsIdRouteChildren {
   ReportsIdExportRoute: typeof ReportsIdExportRoute
 }
@@ -248,24 +259,14 @@ const ReportsIdRouteWithChildren = ReportsIdRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   LoginRoute: LoginRoute,
+  ProjectsRoute: ProjectsRouteWithChildren,
   TransparencyRoute: TransparencyRoute,
   WizardRoute: WizardRoute,
-  ProjectsRoute: ProjectsRoute,
-  ProjectsIdRoute: ProjectsIdRoute,
-  AdminRoute: AdminRoute,
   ProcessingIdRoute: ProcessingIdRoute,
   ReportsIdRoute: ReportsIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

@@ -219,7 +219,7 @@ def format_context(chunks: List[RetrievedChunk], max_chars: int = 3000) -> str:
     lines = []
     total = 0
     for chunk in chunks:
-        header = f"[{chunk.standard_ref} § {chunk.clause_ref} — {chunk.section_title}]"
+        header = f"[{chunk.standard_ref} Clause {chunk.clause_ref} — {chunk.section_title}]"
         block = f"{header}\n{chunk.content}"
         if total + len(block) > max_chars:
             remaining = max_chars - total - len(header) - 10

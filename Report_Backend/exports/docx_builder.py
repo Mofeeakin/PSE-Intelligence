@@ -274,102 +274,39 @@ def _add_doc_info_table(doc: Document, report: Report):
 
 # ── Table of Contents ─────────────────────────────────────────────────────────
 
-# Right tab position (twips): A4 text width 16 cm = 9072 twips; stop at 8900
-_TOC_TAB_TWIPS = "8900"
-
-
-def _toc_entry(doc: Document, text: str, indent_cm: float = 0,
-               bold: bool = False, size_pt: int = 10, colour: str = DARK_NAVY):
-    """Render one TOC line with a dot-leader tab reaching the right margin."""
+def _insert_toc_field(doc: Document) -> None:
+    """Insert a native Word TOC field (Heading 1–3) that Word rebuilds on F9."""
     p = doc.add_paragraph()
     p.clear()
-    p.paragraph_format.space_before = Pt(2)
-    p.paragraph_format.space_after = Pt(2)
 
-    if indent_cm:
-        from docx.shared import Cm as _Cm
-        p.paragraph_format.left_indent = _Cm(indent_cm)
+    def _run_with_elem(elem_tag: str, **attrs):
+        r = p.add_run()
+        el = OxmlElement(elem_tag)
+        for k, v in attrs.items():
+            el.set(qn(k), v)
+        r._r.append(el)
+        return r
 
-    # Attach a right-aligned dot-leader tab stop
-    pPr = p._p.get_or_add_pPr()
-    tabs_el = OxmlElement("w:tabs")
-    tab_el = OxmlElement("w:tab")
-    tab_el.set(qn("w:val"), "right")
-    tab_el.set(qn("w:leader"), "dot")
-    tab_el.set(qn("w:pos"), _TOC_TAB_TWIPS)
-    tabs_el.append(tab_el)
-    pPr.append(tabs_el)
+    _run_with_elem("w:fldChar", **{"w:fldCharType": "begin", "w:dirty": "true"})
 
-    r = p.add_run(text)
-    _style_run(r, size_pt=size_pt, bold=bold, colour=colour)
+    r_instr = p.add_run()
+    instr = OxmlElement("w:instrText")
+    instr.set("xml:space", "preserve")
+    instr.text = ' TOC \\o "1-3" \\h \\z \\u '
+    r_instr._r.append(instr)
+
+    _run_with_elem("w:fldChar", **{"w:fldCharType": "separate"})
+
+    r_ph = p.add_run("(Open in Word and press F9 to generate page numbers)")
+    _style_run(r_ph, size_pt=9, italic=True, colour=MID_GREY)
+
+    _run_with_elem("w:fldChar", **{"w:fldCharType": "end"})
 
 
 def _add_toc(doc: Document, report, is_gap: bool):
-    """Build a TOC with dot-leader entries matching the PSE audit template style."""
+    """Insert a Table of Contents page using a native Word TOC field."""
     _add_heading(doc, "Table of Contents", level=1)
-
-    # Subtle note — standard practice for programmatically generated DOCX
-    note_p = doc.add_paragraph()
-    note_p.clear()
-    r = note_p.add_run("(Open in Microsoft Word and press Ctrl+A then F9 to refresh page numbers)")
-    _style_run(r, size_pt=8, italic=True, colour=MID_GREY)
-    note_p.paragraph_format.space_after = Pt(6)
-
-    sections = list(report.sections.order_by("order"))
-
-    if is_gap:
-        _toc_entry(doc, "1.  Score Summary",      bold=True,  size_pt=11)
-        _toc_entry(doc, "2.  CIRC Rating Legend",  bold=True,  size_pt=11)
-        top_num = 3
-        for sec in sections:
-            name_lower = sec.section_name.lower()
-            if "scope" in name_lower and not (sec.content or "").startswith(JSON_PREFIX):
-                _toc_entry(doc, f"{top_num}.  Scope of Assessment",  bold=True, size_pt=11)
-                top_num += 1
-            elif "executive" in name_lower:
-                _toc_entry(doc, f"{top_num}.  Executive Summary",    bold=True, size_pt=11)
-                top_num += 1
-
-        gap_num = top_num
-        _toc_entry(doc, f"{gap_num}.  Gap Findings by Clause Group", bold=True, size_pt=11)
-        sub = 1
-        for sec in sections:
-            if (sec.content or "").startswith(JSON_PREFIX):
-                label = _sanitise(sec.section_name)
-                _toc_entry(doc, f"{gap_num}.{sub}  {label}", indent_cm=0.8,
-                           colour=MID_GREY, size_pt=10)
-                sub += 1
-        _toc_entry(doc, f"{gap_num + 1}.  Gap Findings Register",    bold=True, size_pt=11)
-        _toc_entry(doc, f"{gap_num + 2}.  Conclusion",               bold=True, size_pt=11)
-
-    else:
-        _toc_entry(doc, "1.0  Executive Summary",  bold=True, size_pt=11)
-        _toc_entry(doc, "2.0  Audit Details",       bold=True, size_pt=11)
-        for sub_label in [
-            "2.1  Audit Criteria and Reference Documents",
-            "2.2  Audit Objectives",
-            "2.3  Audit Method",
-            "2.4  Scope of Audit",
-            "2.5  Audit Findings Definition (Status)",
-            "2.6  Opinion Rating (1-5)",
-        ]:
-            _toc_entry(doc, sub_label, indent_cm=0.8, colour=MID_GREY, size_pt=10)
-
-        clause_secs = [
-            s for s in sections
-            if "executive" not in s.section_name.lower()
-            and "scope" not in s.section_name.lower()
-            and "conclusion" not in s.section_name.lower()
-        ]
-        sec_num = 3
-        for sec in clause_secs:
-            label = _sanitise(sec.section_name)
-            _toc_entry(doc, f"{sec_num}.0  {label}", bold=True, size_pt=11)
-            sec_num += 1
-
-        _toc_entry(doc, f"{sec_num}.0  Consolidated Audit Findings",         bold=True, size_pt=11)
-        _toc_entry(doc, f"{sec_num + 1}.0  Audit Conclusions and Recommendation", bold=True, size_pt=11)
-
+    _insert_toc_field(doc)
     doc.add_page_break()
 
 

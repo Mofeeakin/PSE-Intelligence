@@ -9,12 +9,17 @@ from reports.models import Report
 from exports.colour_map import get_colour, infer_rating, AUDIT_RATING_COLOURS, GAP_RATING_COLOURS
 
 
+def _sanitise_pdf(text) -> str:
+    return (text or "").replace("§", "Clause ").replace("  ", " ")
+
+
 def _build_gap_rows(gaps, service_type: str) -> list[dict]:
     """Enrich gap objects with colour metadata for the template."""
     rows = []
     for gap in gaps:
         rating = gap.rating or infer_rating(gap.severity, "non_compliant", service_type)
         colour = get_colour(rating, service_type)
+        gap.issue = _sanitise_pdf(gap.issue)
         rows.append({
             "gap": gap,
             "rating_label": colour["label"],
@@ -32,7 +37,11 @@ def build_pdf(report: Report) -> bytes:
 
     service_type = getattr(report, "service_type", "audit_report") or "audit_report"
     is_gap = service_type == "gap_assessment"
-    sections = list(report.sections.order_by("order"))
+    raw_sections = list(report.sections.order_by("order"))
+    for sec in raw_sections:
+        sec.section_name = _sanitise_pdf(sec.section_name)
+        sec.content = _sanitise_pdf(sec.content or "")
+    sections = raw_sections
     gaps = list(report.gaps.select_related("requirement").all())
     score = getattr(report, "compliance_score", None)
     legend = GAP_RATING_COLOURS if is_gap else AUDIT_RATING_COLOURS

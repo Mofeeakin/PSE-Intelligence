@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
-import { projects as projectsApi, reports as reportsApi, admin as adminApi } from "@/lib/api-client";
+import { projects as projectsApi, reports as reportsApi, admin as adminApi, standards as standardsApi } from "@/lib/api-client";
 import { useStore } from "@/lib/store";
 import type { Project, AdminUser } from "@/lib/types";
+import type { Standard } from "@/lib/api-client";
 import { Plus, Users, FileCheck2, ChevronRight, Loader2, X } from "lucide-react";
 
 export const Route = createFileRoute("/projects")({
@@ -121,20 +122,45 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
   );
 }
 
+const REPORT_TYPE_OPTIONS = [
+  { value: "audit_report", label: "Audit Report" },
+  { value: "gap_assessment", label: "Gap Assessment" },
+];
+
 function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [clientName, setClientName] = useState("");
   const [clientDetails, setClientDetails] = useState("");
   const [description, setDescription] = useState("");
+  const [standardId, setStandardId] = useState<number | "">("");
+  const [reportTypes, setReportTypes] = useState<string[]>([]);
+  const [availableStandards, setAvailableStandards] = useState<Standard[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    standardsApi.list().then(setAvailableStandards).catch(() => {});
+  }, []);
+
+  const toggleReportType = (val: string) => {
+    setReportTypes((prev) =>
+      prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
+    );
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !clientName.trim()) { setError("Project name and client name are required."); return; }
     setSaving(true);
     try {
-      await projectsApi.create({ name: name.trim(), client_name: clientName.trim(), client_details: clientDetails, description });
+      await projectsApi.create({
+        name: name.trim(),
+        client_name: clientName.trim(),
+        client_details: clientDetails,
+        description,
+        standard: standardId || null,
+        report_types: reportTypes,
+      });
       onCreated();
     } catch {
       setError("Failed to create project. Please try again.");
@@ -145,8 +171,8 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-card border border-border rounded-sm shadow-xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="bg-card border border-border rounded-sm shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
           <h2 className="font-semibold">New Project</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
         </div>
@@ -155,6 +181,40 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
           <Field label="Client Name *" value={clientName} onChange={setClientName} placeholder="e.g. ACME Corporation Ltd" />
           <Field label="Client Details" value={clientDetails} onChange={setClientDetails} placeholder="Contact, address, sector…" multiline />
           <Field label="Description" value={description} onChange={setDescription} placeholder="Scope overview or project notes" multiline />
+
+          {/* Standard */}
+          <div className="space-y-1">
+            <label className="label-eyebrow">Compliance Standard</label>
+            <select
+              value={standardId}
+              onChange={(e) => setStandardId(Number(e.target.value) || "")}
+              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-sm focus:outline-none focus:border-primary"
+            >
+              <option value="">— Select standard —</option>
+              {availableStandards.map((s) => (
+                <option key={s.id} value={s.id}>{s.code} — {s.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Report types */}
+          <div className="space-y-2">
+            <label className="label-eyebrow">Report Types</label>
+            <div className="flex flex-wrap gap-3">
+              {REPORT_TYPE_OPTIONS.map(({ value, label }) => (
+                <label key={value} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={reportTypes.includes(value)}
+                    onChange={() => toggleReportType(value)}
+                    className="accent-primary"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+
           {error && <p className="text-xs text-destructive">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>

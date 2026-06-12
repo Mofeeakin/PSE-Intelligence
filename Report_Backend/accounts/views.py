@@ -7,23 +7,29 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 
-from .models import UserProfile
+from .models import UserProfile, Notification
 from .permissions import get_role
 from .serializers import RegisterSerializer, UserSerializer
 
 
 class RegisterView(APIView):
-    permission_classes = [AllowAny]
+    """Super Admin only: create a new user account with an assigned role."""
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if get_role(request.user) != "super_admin":
+            return Response(
+                {"detail": "Only Super Admins can create user accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            token = Token.objects.get(user=user)
-            return Response(
-                {"token": token.key, "user": UserSerializer(user).data},
-                status=status.HTTP_201_CREATED,
-            )
+            generated = getattr(user, "_generated_password", None)
+            response_data = {"user": UserSerializer(user).data}
+            if generated:
+                response_data["generated_password"] = generated
+            return Response(response_data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -79,4 +85,45 @@ class UserRoleView(APIView):
         profile.role = role
         profile.save()
         return Response(UserSerializer(target).data)
+
+
+# ── Notification Views ────────────────────────────────────────────────────────
+
+class NotificationSerializer:
+    """Minimal inline serialiser to avoid a separate serializers file entry."""
+    @staticmethod
+    def serialize(notif):
+        return {
+            "id": notif.id,
+            "message": notif.message,
+            "report": notif.report_id,
+            "report_title": notif.report.title if notif.report else None,
+            "is_read": notif.is_read,
+            "created_at": notif.created_at.isoformat(),
+        }
+
+
+class NotificationListView(APIView):
+    """List the current user's notifications; supports ?unread=true filter."""
+
+    def get(self, request):
+        qs = Notification.objects.filter(user=request.user).select_related("report")
+        if request.query_params.get("unread") == "true":
+            qs = qs.filter(is_read=False)
+        return Response([NotificationSerializer.serialize(n) for n in qs[:50]])
+
+    def post(self, request):
+        """Mark all notifications as read."""
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({"detail": "All notifications marked as read."})
+
+
+class NotificationDetailView(APIView):
+    """PATCH a single notification to mark it read."""
+
+    def patch(self, request, pk):
+        notif = get_object_or_404(Notification, pk=pk, user=request.user)
+        notif.is_read = request.data.get("is_read", True)
+        notif.save()
+        return Response(NotificationSerializer.serialize(notif))
 

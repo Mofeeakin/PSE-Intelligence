@@ -6,11 +6,16 @@ from .views import (
     EvidenceUploadView,
     RevalidateView,
     RescoreView,
+    StandardListView,
     ClauseListView,
     AgentLogsView,
     ProjectListCreateView,
     ProjectDetailView,
     ProjectMembersView,
+    ReportGenerateView,
+    ReportSubmitReviewView,
+    ReportApproveView,
+    ReportAssignView,
 )
 
 urlpatterns = [
@@ -21,6 +26,11 @@ urlpatterns = [
     path("reports/<int:pk>/validate/", RevalidateView.as_view(), name="report-validate"),
     path("reports/<int:pk>/rescore/", RescoreView.as_view(), name="report-rescore"),
     path("reports/<int:pk>/logs/", AgentLogsView.as_view(), name="report-logs"),
+    path("reports/<int:pk>/generate/", ReportGenerateView.as_view(), name="report-generate"),
+    path("reports/<int:pk>/submit_review/", ReportSubmitReviewView.as_view(), name="report-submit-review"),
+    path("reports/<int:pk>/approve/", ReportApproveView.as_view(), name="report-approve"),
+    path("reports/<int:pk>/assign/", ReportAssignView.as_view(), name="report-assign"),
+    path("standards/", StandardListView.as_view(), name="standard-list"),
     path("clauses/", ClauseListView.as_view(), name="clause-list"),
     path("projects/", ProjectListCreateView.as_view(), name="project-list-create"),
     path("projects/<int:pk>/", ProjectDetailView.as_view(), name="project-detail"),
