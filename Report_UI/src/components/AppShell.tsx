@@ -45,16 +45,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const role = currentUser?.role ?? "user";
 
-  const NAV = [
-    { to: "/", label: "Dashboard" },
-    ...(role === "sub_admin" || role === "super_admin"
-      ? [{ to: "/projects", label: "Projects" }]
-      : []),
-    ...(role === "super_admin"
-      ? [{ to: "/admin", label: "Admin" }]
-      : []),
-    { to: "/transparency", label: "AI Transparency" },
-  ];
+  const NAV = role === "super_admin"
+    ? [
+        { to: "/", label: "Overview" },
+        { to: "/projects", label: "Projects" },
+        { to: "/admin", label: "Users & Roles" },
+        { to: "/transparency", label: "AI Transparency" },
+      ]
+    : role === "sub_admin"
+    ? [
+        { to: "/", label: "Dashboard" },
+        { to: "/projects", label: "Projects" },
+        { to: "/transparency", label: "AI Transparency" },
+      ]
+    : [
+        { to: "/", label: "My Tasks" },
+        { to: "/transparency", label: "AI Transparency" },
+      ];
 
   const initials = currentUser?.username
     ? currentUser.username.slice(0, 2).toUpperCase()

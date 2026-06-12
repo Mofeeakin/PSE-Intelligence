@@ -67,19 +67,8 @@ echo "==> Seeding ISO 27001 data and building RAG index (background)..."
     python manage.py build_rag_index
 ) &
 
-echo "==> Creating superuser if not exists..."
-python manage.py shell -c "
-from django.contrib.auth.models import User
-import os
-u = os.environ.get('DJANGO_SUPERUSER_USERNAME', 'admin')
-p = os.environ.get('DJANGO_SUPERUSER_PASSWORD', '')
-e = os.environ.get('DJANGO_SUPERUSER_EMAIL', 'admin@example.com')
-if p and not User.objects.filter(username=u).exists():
-    User.objects.create_superuser(u, e, p)
-    print('Superuser created:', u)
-else:
-    print('Superuser already exists or no password set — skipping.')
-" || true
+echo "==> Ensuring super-admin account..."
+python manage.py ensure_superadmin
 
 echo "==> Starting Gunicorn (2 workers, preload)..."
 exec gunicorn config.wsgi:application \

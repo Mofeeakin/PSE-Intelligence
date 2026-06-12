@@ -5,8 +5,13 @@ import { PageHeader, ScoreBadge, StatusPill } from "@/components/AppShell";
 import {
   Plus, FileCheck2, Download, ShieldCheck, Activity, AlertTriangle,
   TrendingUp, FolderOpen, Users, ClipboardCheck, CheckCircle2, Loader2,
+  UserPlus, Settings, Database, Cpu, BarChart3, ShieldAlert, KeyRound,
 } from "lucide-react";
-import { projects as projectsApi, reports as reportsApi, notifications as notifApi, admin as adminApi, type Notification } from "@/lib/api-client";
+import {
+  projects as projectsApi, reports as reportsApi,
+  notifications as notifApi, admin as adminApi,
+  type Notification,
+} from "@/lib/api-client";
 import type { Project, AdminUser } from "@/lib/types";
 
 export const Route = createFileRoute("/")({
@@ -23,13 +28,14 @@ function Dashboard() {
   const currentUser = useStore((s) => s.currentUser);
   const role = currentUser?.role ?? "user";
 
-  if (role === "super_admin" || role === "sub_admin") return <AdminDashboard role={role} />;
+  if (role === "super_admin") return <SuperAdminDashboard />;
+  if (role === "sub_admin") return <SubAdminDashboard />;
   return <StaffDashboard />;
 }
 
-// ── Admin / Sub Admin Dashboard ──────────────────────────────────────────────
+// ── Super Admin Dashboard ─────────────────────────────────────────────────────
 
-function AdminDashboard({ role }: { role: string }) {
+function SuperAdminDashboard() {
   const reports = useStore((s) => s.reports);
   const loadReports = useStore((s) => s.loadReports);
   const navigate = useNavigate();
@@ -42,55 +48,204 @@ function AdminDashboard({ role }: { role: string }) {
   useEffect(() => {
     loadReports();
     projectsApi.list().then(setProjects).catch(() => {}).finally(() => setLoadingProjects(false));
-    if (role === "super_admin") adminApi.listUsers().then(setAllUsers).catch(() => {});
-  }, [loadReports, role]);
+    adminApi.listUsers().then(setAllUsers).catch(() => {});
+  }, [loadReports]);
 
+  const pendingReview = reports.filter((r) => r.status === "Pending Review");
+  const staffCount = allUsers.filter((u) => u.role === "user").length;
+  const pmCount = allUsers.filter((u) => u.role === "sub_admin").length;
   const avg = Math.round(
     reports.filter(r => r.score).reduce((a, r) => a + (r.score?.final ?? 0), 0) /
     Math.max(1, reports.filter(r => r.score).length)
   );
 
-  const pendingReview = reports.filter((r) => r.status === "Pending Review");
-  const staffCount = allUsers.filter((u) => u.role === "user").length;
-
   const handleApprove = async (reportId: string) => {
     setApprovingId(Number(reportId));
-    try {
-      await reportsApi.approve(reportId);
-      loadReports();
-    } catch { /* ignore */ } finally { setApprovingId(null); }
+    try { await reportsApi.approve(reportId); loadReports(); }
+    catch { /* ignore */ } finally { setApprovingId(null); }
   };
 
   return (
     <>
       <PageHeader
-        eyebrow="System overview"
-        title="Admin Dashboard"
-        description="Manage projects, assign reports to staff, and oversee all compliance work."
+        eyebrow="Super Admin · Full Access"
+        title="System Control"
+        description="Platform-wide oversight — users, projects, reports, AI pipeline, and approvals."
+        actions={
+          <div className="flex items-center gap-2">
+            <Link to="/admin"
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-border rounded-sm text-sm font-medium hover:bg-accent transition-colors">
+              <Users className="h-4 w-4" /> Manage Users
+            </Link>
+            <Link to="/projects"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90">
+              <FolderOpen className="h-4 w-4" /> Projects
+            </Link>
+          </div>
+        }
+      />
+
+      {/* KPI row */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <KpiCard icon={<Users className="h-4 w-4" />} label="Total Users" value={String(allUsers.length)} sub={`${pmCount} PM · ${staffCount} staff`} />
+        <KpiCard icon={<FolderOpen className="h-4 w-4" />} label="Projects" value={String(projects.length)} sub="Active client projects" />
+        <KpiCard icon={<FileCheck2 className="h-4 w-4" />} label="All Reports" value={String(reports.length)} sub="Across all projects" />
+        <KpiCard icon={<ClipboardCheck className="h-4 w-4" />} label="Pending Review" value={String(pendingReview.length)} sub="Awaiting approval" accent={pendingReview.length > 0} />
+        <KpiCard icon={<TrendingUp className="h-4 w-4" />} label="Avg Score" value={`${avg || 0}%`} sub="Scored reports" />
+      </div>
+
+      <div className="grid grid-cols-12 gap-8">
+        {/* Main column */}
+        <section className="col-span-12 lg:col-span-8 space-y-6">
+
+          {/* Quick-access system tiles */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <SystemTile icon={<KeyRound className="h-5 w-5" />} label="User Management" to="/admin" />
+            <SystemTile icon={<FolderOpen className="h-5 w-5" />} label="All Projects" to="/projects" />
+            <SystemTile icon={<Cpu className="h-5 w-5" />} label="AI Transparency" to="/transparency" />
+            <SystemTile icon={<BarChart3 className="h-5 w-5" />} label="Reports Archive" onClick={() => navigate({ to: "/" })} />
+          </div>
+
+          {/* All Reports */}
+          <div className="bg-card border border-border rounded-sm">
+            <div className="px-6 py-4 flex items-center justify-between border-b border-border">
+              <h2 className="font-display text-base font-semibold">All Reports</h2>
+              <span className="label-eyebrow">{reports.length} total</span>
+            </div>
+            <ReportsTable reports={reports.slice(0, 8)} onNavigate={navigate} showApprove onApprove={handleApprove} approvingId={approvingId} />
+          </div>
+
+          {/* Users quick-list */}
+          <div className="bg-card border border-border rounded-sm">
+            <div className="px-6 py-4 flex items-center justify-between border-b border-border">
+              <h2 className="font-display text-base font-semibold">Team Members</h2>
+              <Link to="/admin" className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
+                <UserPlus className="h-3.5 w-3.5" /> Manage →
+              </Link>
+            </div>
+            {allUsers.length === 0 ? (
+              <p className="px-6 py-8 text-sm text-muted-foreground text-center">No users yet.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {allUsers.slice(0, 6).map((u) => (
+                  <div key={u.id} className="px-6 py-3 flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-medium">{u.username}</span>
+                      <span className="text-xs text-muted-foreground ml-2">{u.email}</span>
+                    </div>
+                    <RolePill role={u.role} />
+                  </div>
+                ))}
+                {allUsers.length > 6 && (
+                  <div className="px-6 py-3 text-xs text-muted-foreground">+{allUsers.length - 6} more — <Link to="/admin" className="text-primary hover:underline">view all</Link></div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Sidebar */}
+        <aside className="col-span-12 lg:col-span-4 space-y-6">
+          {/* Pending Review */}
+          <div className="bg-card border border-border rounded-sm">
+            <div className="px-5 py-4 flex items-center justify-between border-b border-border">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="h-4 w-4 text-[oklch(0.45_0.13_70)]" />
+                <span className="label-eyebrow">Pending Review</span>
+              </div>
+              {pendingReview.length > 0 && (
+                <span className="text-[10px] font-mono bg-warning/15 text-[oklch(0.45_0.13_70)] px-1.5 py-0.5 rounded-sm">
+                  {pendingReview.length}
+                </span>
+              )}
+            </div>
+            {pendingReview.length === 0 ? (
+              <p className="px-5 py-5 text-sm text-muted-foreground">No reports awaiting review.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {pendingReview.map((r) => (
+                  <li key={r.id} className="px-5 py-3">
+                    <p className="text-sm font-medium leading-snug">{r.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{r.organization}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button onClick={() => navigate({ to: "/reports/$id", params: { id: r.id } })}
+                        className="px-2 py-1 text-xs rounded-sm hover:bg-accent border border-border">View</button>
+                      <button
+                        disabled={approvingId === Number(r.id)}
+                        onClick={() => handleApprove(r.id)}
+                        className="px-2 py-1 text-xs rounded-sm bg-success/15 text-[oklch(0.4_0.12_145)] hover:bg-success/25 border border-transparent disabled:opacity-50 inline-flex items-center gap-1">
+                        {approvingId === Number(r.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                        Approve
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <ProjectsSummaryCard projects={projects} loading={loadingProjects} />
+          <InsightCard />
+          <AgentsCard />
+        </aside>
+      </div>
+    </>
+  );
+}
+
+// ── Sub Admin / PM Dashboard ──────────────────────────────────────────────────
+
+function SubAdminDashboard() {
+  const reports = useStore((s) => s.reports);
+  const loadReports = useStore((s) => s.loadReports);
+  const navigate = useNavigate();
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [approvingId, setApprovingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    loadReports();
+    projectsApi.list().then(setProjects).catch(() => {}).finally(() => setLoadingProjects(false));
+  }, [loadReports]);
+
+  const pendingReview = reports.filter((r) => r.status === "Pending Review");
+  const activeReports = reports.filter((r) => !["Completed", "Approved", "Failed"].includes(r.status));
+
+  const handleApprove = async (reportId: string) => {
+    setApprovingId(Number(reportId));
+    try { await reportsApi.approve(reportId); loadReports(); }
+    catch { /* ignore */ } finally { setApprovingId(null); }
+  };
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Project Manager"
+        title="Project Overview"
+        description="Manage your projects, assign reports to auditors, and review completed work."
         actions={
           <Link to="/projects"
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90 transition-opacity">
-            <FolderOpen className="h-4 w-4" /> Manage Projects
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90">
+            <Plus className="h-4 w-4" /> New Project
           </Link>
         }
       />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <KpiCard icon={<FolderOpen className="h-4 w-4" />} label="Total Projects" value={String(projects.length)} sub="All projects" />
-        <KpiCard icon={<FileCheck2 className="h-4 w-4" />} label="Active Reports" value={String(reports.filter(r => !["Completed","Approved"].includes(r.status)).length)} sub="In progress" />
-        {role === "super_admin" && (
-          <KpiCard icon={<Users className="h-4 w-4" />} label="Staff Members" value={String(staffCount)} sub="Active users" />
-        )}
-        <KpiCard icon={<TrendingUp className="h-4 w-4" />} label="Avg Score" value={`${avg || 0}%`} sub="Scored reports" />
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        <KpiCard icon={<FolderOpen className="h-4 w-4" />} label="My Projects" value={String(projects.length)} sub="Active client engagements" />
+        <KpiCard icon={<Activity className="h-4 w-4" />} label="Active Reports" value={String(activeReports.length)} sub="In progress" />
+        <KpiCard icon={<ClipboardCheck className="h-4 w-4" />} label="Pending Review" value={String(pendingReview.length)} sub="Awaiting your approval" accent={pendingReview.length > 0} />
       </div>
 
       <div className="grid grid-cols-12 gap-8">
-        {/* Projects table */}
+        {/* Main */}
         <section className="col-span-12 lg:col-span-8 space-y-6">
+          {/* Projects table */}
           <div className="bg-card border border-border rounded-sm">
             <div className="px-6 py-4 flex items-center justify-between border-b border-border">
-              <h2 className="font-display text-base font-semibold">Projects</h2>
+              <h2 className="font-display text-base font-semibold">My Projects</h2>
               <Link to="/projects" className="text-xs text-primary hover:underline">View all →</Link>
             </div>
             {loadingProjects ? (
@@ -102,7 +257,7 @@ function AdminDashboard({ role }: { role: string }) {
                 <p className="text-sm text-muted-foreground mb-3">No projects yet.</p>
                 <Link to="/projects"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-sm">
-                  <Plus className="h-3.5 w-3.5" /> Create a project
+                  <Plus className="h-3.5 w-3.5" /> Create first project
                 </Link>
               </div>
             ) : (
@@ -113,37 +268,27 @@ function AdminDashboard({ role }: { role: string }) {
                       <th className="px-6 py-3 text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Project</th>
                       <th className="px-3 py-3 text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Client</th>
                       <th className="px-3 py-3 text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Standard</th>
-                      <th className="px-3 py-3 text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Status</th>
                       <th className="px-3 py-3 text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Reports</th>
                       <th className="px-3 py-3 text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Members</th>
                       <th className="px-6 py-3 text-right font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {projects.slice(0, 8).map((p) => (
+                    {projects.map((p) => (
                       <tr key={p.id} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors">
                         <td className="px-6 py-3">
                           <div className="font-medium">{p.name}</div>
-                          <div className="text-xs text-muted-foreground">{p.created_by_name}</div>
+                          <span className={`text-[10px] font-mono uppercase tracking-wider ${p.status === "active" ? "text-[oklch(0.4_0.12_145)]" : "text-muted-foreground"}`}>{p.status}</span>
                         </td>
                         <td className="px-3 py-3 text-sm text-muted-foreground">{p.client_name}</td>
                         <td className="px-3 py-3 text-xs font-mono text-muted-foreground">{p.standard_name ?? "—"}</td>
-                        <td className="px-3 py-3">
-                          <span className={`text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-sm inline-block
-                            ${p.status === "active" ? "bg-success/15 text-[oklch(0.4_0.12_145)]" :
-                              p.status === "completed" ? "bg-muted text-muted-foreground" : "bg-muted text-muted-foreground/60"}`}>
-                            {p.status}
-                          </span>
-                        </td>
                         <td className="px-3 py-3 text-sm font-mono">{p.report_count}</td>
                         <td className="px-3 py-3 text-sm font-mono">{p.member_count}</td>
                         <td className="px-6 py-3 text-right">
-                          <div className="inline-flex gap-1">
-                            <button onClick={() => navigate({ to: "/projects/$id", params: { id: String(p.id) } })}
-                              className="px-2.5 py-1.5 text-xs rounded-sm hover:bg-accent border border-transparent hover:border-border">
-                              View
-                            </button>
-                          </div>
+                          <button onClick={() => navigate({ to: "/projects/$id", params: { id: String(p.id) } })}
+                            className="px-2.5 py-1.5 text-xs rounded-sm hover:bg-accent border border-transparent hover:border-border">
+                            Manage
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -153,13 +298,13 @@ function AdminDashboard({ role }: { role: string }) {
             )}
           </div>
 
-          {/* All Reports table */}
+          {/* Recent Reports */}
           <div className="bg-card border border-border rounded-sm">
             <div className="px-6 py-4 flex items-center justify-between border-b border-border">
               <h2 className="font-display text-base font-semibold">Recent Reports</h2>
               <span className="label-eyebrow">{reports.length} total</span>
             </div>
-            <ReportsTable reports={reports.slice(0, 6)} onNavigate={navigate} />
+            <ReportsTable reports={reports.slice(0, 6)} onNavigate={navigate} showApprove onApprove={handleApprove} approvingId={approvingId} />
           </div>
         </section>
 
@@ -204,19 +349,17 @@ function AdminDashboard({ role }: { role: string }) {
           </div>
 
           <InsightCard />
-          <AgentsCard />
         </aside>
       </div>
     </>
   );
 }
 
-// ── Staff Dashboard ───────────────────────────────────────────────────────────
+// ── Staff / Auditor Dashboard ─────────────────────────────────────────────────
 
 function StaffDashboard() {
   const reports = useStore((s) => s.reports);
   const loadReports = useStore((s) => s.loadReports);
-  const revalidate = useStore((s) => s.revalidate);
   const navigate = useNavigate();
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
@@ -229,7 +372,6 @@ function StaffDashboard() {
   const drafts = reports.filter((r) => r.status === "Draft");
   const inProgress = reports.filter((r) => ["Processing", "Validation", "Scored"].includes(r.status));
   const pendingReview = reports.filter((r) => r.status === "Pending Review");
-
   const visibleNotifs = notifs.filter((n) => !dismissedIds.has(n.id));
 
   const dismiss = (id: number) => {
@@ -240,9 +382,9 @@ function StaffDashboard() {
   return (
     <>
       <PageHeader
-        eyebrow="My workspace"
+        eyebrow="Auditor workspace"
         title="My Tasks"
-        description="Reports assigned to you, your drafts, and current processing status."
+        description="Reports assigned to you, your drafts, and submission status."
         actions={
           <Link to="/wizard" search={{ draft: undefined }}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90 transition-opacity">
@@ -255,7 +397,7 @@ function StaffDashboard() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <KpiCard icon={<FileCheck2 className="h-4 w-4" />} label="Assigned Reports" value={String(reports.length)} sub="Yours + assigned" />
         <KpiCard icon={<Activity className="h-4 w-4" />} label="In Progress" value={String(inProgress.length + drafts.length)} sub="Draft or processing" />
-        <KpiCard icon={<ClipboardCheck className="h-4 w-4" />} label="Pending Review" value={String(pendingReview.length)} sub="Awaiting admin" />
+        <KpiCard icon={<ClipboardCheck className="h-4 w-4" />} label="Pending Review" value={String(pendingReview.length)} sub="Submitted, awaiting PM" />
       </div>
 
       {/* Notification banners */}
@@ -299,7 +441,7 @@ function StaffDashboard() {
             </thead>
             <tbody>
               {reports.length === 0 && (
-                <tr><td colSpan={6} className="px-6 py-10 text-center text-sm text-muted-foreground">No reports yet. Create your first report above.</td></tr>
+                <tr><td colSpan={6} className="px-6 py-10 text-center text-sm text-muted-foreground">No reports yet. Start by creating a new report above.</td></tr>
               )}
               {reports.map((r) => (
                 <tr key={r.id} className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors">
@@ -353,7 +495,15 @@ function StaffDashboard() {
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
 
-function ReportsTable({ reports, onNavigate }: { reports: import("@/lib/types").Report[], onNavigate: ReturnType<typeof useNavigate> }) {
+function ReportsTable({
+  reports, onNavigate, showApprove, onApprove, approvingId,
+}: {
+  reports: import("@/lib/types").Report[];
+  onNavigate: ReturnType<typeof useNavigate>;
+  showApprove?: boolean;
+  onApprove?: (id: string) => void;
+  approvingId?: number | null;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -381,10 +531,21 @@ function ReportsTable({ reports, onNavigate }: { reports: import("@/lib/types").
                 <div className="inline-flex gap-1">
                   <button onClick={() => onNavigate({ to: "/reports/$id", params: { id: r.id } })}
                     className="px-2.5 py-1.5 text-xs rounded-sm hover:bg-accent border border-transparent hover:border-border">View</button>
-                  <button onClick={() => onNavigate({ to: "/reports/$id/export", params: { id: r.id } })}
-                    className="px-2.5 py-1.5 text-xs rounded-sm hover:bg-accent border border-transparent hover:border-border inline-flex items-center gap-1">
-                    <Download className="h-3 w-3" />Export
-                  </button>
+                  {showApprove && r.status === "Pending Review" && onApprove && (
+                    <button
+                      disabled={approvingId === Number(r.id)}
+                      onClick={() => onApprove(r.id)}
+                      className="px-2.5 py-1.5 text-xs rounded-sm bg-success/15 text-[oklch(0.4_0.12_145)] hover:bg-success/25 border border-transparent disabled:opacity-50 inline-flex items-center gap-1">
+                      {approvingId === Number(r.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                      Approve
+                    </button>
+                  )}
+                  {["Completed", "Approved"].includes(r.status) && (
+                    <button onClick={() => onNavigate({ to: "/reports/$id/export", params: { id: r.id } })}
+                      className="px-2.5 py-1.5 text-xs rounded-sm hover:bg-accent border border-transparent hover:border-border inline-flex items-center gap-1">
+                      <Download className="h-3 w-3" />Export
+                    </button>
+                  )}
                 </div>
               </td>
             </tr>
@@ -395,12 +556,63 @@ function ReportsTable({ reports, onNavigate }: { reports: import("@/lib/types").
   );
 }
 
-function KpiCard({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub: string }) {
+function KpiCard({ icon, label, value, sub, accent }: { icon: React.ReactNode; label: string; value: string; sub: string; accent?: boolean }) {
+  return (
+    <div className={`border rounded-sm p-5 ${accent ? "bg-warning/5 border-warning/30" : "bg-card border-border"}`}>
+      <div className="flex items-center gap-2 text-muted-foreground">{icon}<span className="label-eyebrow">{label}</span></div>
+      <div className={`mt-3 font-display text-3xl font-semibold tracking-tight ${accent ? "text-[oklch(0.45_0.13_70)]" : ""}`}>{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{sub}</div>
+    </div>
+  );
+}
+
+function SystemTile({ icon, label, to, onClick }: { icon: React.ReactNode; label: string; to?: string; onClick?: () => void }) {
+  const cls = "flex flex-col items-center justify-center gap-2 p-4 bg-card border border-border rounded-sm hover:border-foreground/20 hover:bg-accent/40 transition-all cursor-pointer text-center group";
+  const inner = (
+    <>
+      <div className="text-muted-foreground group-hover:text-foreground transition-colors">{icon}</div>
+      <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">{label}</span>
+    </>
+  );
+  if (to) return <Link to={to as "/admin"} className={cls}>{inner}</Link>;
+  return <button onClick={onClick} className={cls}>{inner}</button>;
+}
+
+function RolePill({ role }: { role: string }) {
+  const map: Record<string, string> = {
+    super_admin: "bg-primary/10 text-primary",
+    sub_admin: "bg-info/15 text-[oklch(0.4_0.12_240)]",
+    user: "bg-muted text-muted-foreground",
+  };
+  const label: Record<string, string> = { super_admin: "Super Admin", sub_admin: "PM", user: "Staff" };
+  return (
+    <span className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-sm ${map[role] ?? "bg-muted"}`}>
+      {label[role] ?? role}
+    </span>
+  );
+}
+
+function ProjectsSummaryCard({ projects, loading }: { projects: Project[]; loading: boolean }) {
   return (
     <div className="bg-card border border-border rounded-sm p-5">
-      <div className="flex items-center gap-2 text-muted-foreground">{icon}<span className="label-eyebrow">{label}</span></div>
-      <div className="mt-3 font-display text-3xl font-semibold tracking-tight">{value}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{sub}</div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="label-eyebrow">Projects at a glance</div>
+        <Link to="/projects" className="text-xs text-primary hover:underline">All →</Link>
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…</div>
+      ) : projects.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No projects yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {projects.slice(0, 4).map((p) => (
+            <li key={p.id} className="flex items-center justify-between">
+              <span className="text-sm truncate max-w-[60%]">{p.name}</span>
+              <span className="text-xs font-mono text-muted-foreground">{p.report_count} reports</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -411,8 +623,8 @@ function InsightCard() {
     reports.filter(r => r.score).reduce((a, r) => a + (r.score?.final ?? 0), 0) /
     Math.max(1, reports.filter(r => r.score).length)
   );
-  const conflicts = reports.reduce((a, r) => a + r.conflicts.length, 0);
   const gaps = reports.reduce((a, r) => a + r.validation.filter(v => v.severity === "gap").length, 0);
+  const conflicts = reports.reduce((a, r) => a + r.conflicts.length, 0);
   return (
     <div className="bg-card border border-border rounded-sm p-5">
       <div className="label-eyebrow mb-3">System Insights</div>
