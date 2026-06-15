@@ -205,8 +205,17 @@ export const reports = {
       body: JSON.stringify({ user_id: userId }),
     }),
 
-  exportUrl: (id: string | number, format: "docx" | "pdf") =>
-    `${BASE_URL}/api/reports/${id}/export/?format=${format}&token=${getToken() ?? ""}`,
+  exportBlob: async (id: string | number, format: "docx" | "pdf"): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch(`${BASE_URL}/api/reports/${id}/export/?format=${format}`, {
+      headers: token ? { Authorization: `Token ${token}` } : {},
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => res.statusText);
+      throw new ApiError(res.status, msg);
+    }
+    return res.blob();
+  },
 
   logs: (id: string | number) =>
     request<AgentExecutionLog[]>(`/api/reports/${id}/logs/`),

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { reports as reportsApi, logo as logoApi } from "@/lib/api-client";
-import { Download, FileText, FileType2, ChevronLeft, Upload, X, Image } from "lucide-react";
+import { Download, FileText, FileType2, ChevronLeft, Upload, X, Image, Loader2 } from "lucide-react";
 import type { ReportLogo } from "@/lib/types";
 
 export const Route = createFileRoute("/reports/$id/export")({
@@ -28,6 +28,8 @@ function ExportPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [saveMsg, setSaveMsg] = useState("");
+  const [downloading, setDownloading] = useState<"docx" | "pdf" | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -93,12 +95,24 @@ function ExportPage() {
     } catch { /* ignore */ }
   };
 
-  const doDownload = (format: "docx" | "pdf") => {
-    const url = reportsApi.exportUrl(id, format);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `report-${id}.${format}`;
-    a.click();
+  const doDownload = async (format: "docx" | "pdf") => {
+    setDownloading(format);
+    setDownloadError(null);
+    try {
+      const blob = await reportsApi.exportBlob(id, format);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `report-${id}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      setDownloadError(`Failed to download ${format.toUpperCase()}. Please try again.`);
+    } finally {
+      setDownloading(null);
+    }
   };
 
   const files = [
@@ -123,8 +137,14 @@ function ExportPage() {
         {/* Download formats */}
         <section className="col-span-12 lg:col-span-8 space-y-6">
           <div className="space-y-3">
+            {downloadError && (
+              <div className="px-4 py-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-sm">
+                {downloadError}
+              </div>
+            )}
             {files.map((f) => {
               const Icon = f.icon;
+              const isDownloading = downloading === f.format;
               return (
                 <div key={f.format} className="bg-card border border-border rounded-sm p-5 flex items-center gap-5">
                   <div className="h-12 w-12 rounded-sm bg-paper border border-border grid place-items-center">
@@ -137,9 +157,12 @@ function ExportPage() {
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">{f.desc}</p>
                   </div>
-                  <button onClick={() => doDownload(f.format)}
-                    className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-foreground text-background rounded-sm hover:opacity-90">
-                    <Download className="h-3.5 w-3.5" /> Download
+                  <button onClick={() => doDownload(f.format)} disabled={isDownloading || !!downloading}
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-foreground text-background rounded-sm hover:opacity-90 disabled:opacity-50">
+                    {isDownloading
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                      : <><Download className="h-3.5 w-3.5" /> Download</>
+                    }
                   </button>
                 </div>
               );
