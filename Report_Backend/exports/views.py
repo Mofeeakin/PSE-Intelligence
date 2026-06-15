@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import traceback as _traceback
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -9,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import IsAuthenticated
 
 from reports.models import Report
 from accounts.permissions import get_role
@@ -21,6 +20,25 @@ from .serializers import ReportLogoSerializer
 logger = logging.getLogger(__name__)
 
 
+class QueryParamTokenAuthentication(TokenAuthentication):
+    """
+    Extends TokenAuthentication to also accept ?token= query param.
+    This allows browser-initiated file downloads (<a href>) to authenticate
+    without an Authorization header, since browsers can't set headers on
+    link-click navigations.
+    """
+    def authenticate(self, request):
+        # Try the standard Authorization header first.
+        result = super().authenticate(request)
+        if result is not None:
+            return result
+        # Fall back to ?token= query param.
+        token_key = request.query_params.get("token")
+        if token_key:
+            return self.authenticate_credentials(token_key)
+        return None
+
+
 class ExportView(APIView):
     """
     Supports both Authorization header and ?token= query param so that
@@ -30,26 +48,15 @@ class ExportView(APIView):
     Content negotiation is disabled so that the ?format= query param is
     not intercepted by DRF's URL_FORMAT_OVERRIDE mechanism.
     """
+    authentication_classes = [QueryParamTokenAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def perform_content_negotiation(self, request, force=False):
         # Skip DRF renderer selection — we write HttpResponse directly.
         renderers = self.get_renderers()
         return (renderers[0] if renderers else None), "application/octet-stream"
 
-    def _authenticate_from_query(self, request):
-        """Fall back to ?token= query param if header auth is absent."""
-        token_key = request.query_params.get("token")
-        if token_key and not request.user.is_authenticated:
-            from rest_framework.authtoken.models import Token
-            try:
-                token = Token.objects.select_related("user").get(key=token_key)
-                request._user = token.user
-                request._auth = token
-            except Token.DoesNotExist:
-                raise AuthenticationFailed("Invalid token.")
-
     def get(self, request, pk):
-        self._authenticate_from_query(request)
         fmt = request.query_params.get("format", "docx").lower()
         if fmt not in ("docx", "pdf"):
             return Response(
