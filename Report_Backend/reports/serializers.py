@@ -40,12 +40,18 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
 
 class GapSerializer(serializers.ModelSerializer):
-    requirement_code = serializers.CharField(source="requirement.code", read_only=True)
+    description = serializers.CharField(source="issue", read_only=True)
+    requirement = serializers.SerializerMethodField()
 
     class Meta:
         model = Gap
-        fields = ("id", "requirement", "requirement_code", "issue", "severity", "created_at")
-        read_only_fields = ("id", "created_at")
+        fields = ("id", "description", "requirement", "severity", "rating", "created_at")
+        read_only_fields = fields
+
+    def get_requirement(self, obj):
+        if obj.requirement:
+            return {"code": obj.requirement.code, "text": obj.requirement.text}
+        return None
 
 
 class ValidationResultSerializer(serializers.ModelSerializer):
@@ -83,7 +89,7 @@ class ReportListSerializer(serializers.ModelSerializer):
 
 
 class ReportDetailSerializer(serializers.ModelSerializer):
-    standard_code = serializers.CharField(source="standard.code", read_only=True)
+    standard = serializers.SerializerMethodField()
     evidence = EvidenceSerializer(many=True, read_only=True)
     submissions = SubmissionSerializer(many=True, read_only=True)
     gaps = GapSerializer(many=True, read_only=True)
@@ -93,12 +99,15 @@ class ReportDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
         fields = (
-            "id", "title", "organisation", "department", "standard_code",
+            "id", "title", "organisation", "department", "standard",
             "scope", "service_type", "status", "current_stage", "progress_pct", "error_message",
             "created_at", "updated_at",
             "evidence", "submissions", "gaps", "validation_result", "compliance_score",
         )
         read_only_fields = fields
+
+    def get_standard(self, obj):
+        return {"code": obj.standard.code, "name": obj.standard.name}
 
 
 class ReportCreateSerializer(serializers.Serializer):

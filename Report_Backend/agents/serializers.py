@@ -10,8 +10,12 @@ class ReportSectionSerializer(serializers.ModelSerializer):
 
 
 class AgentExecutionSerializer(serializers.ModelSerializer):
+    prompt_text = serializers.CharField(source="prompt_used", read_only=True)
+    output_text = serializers.CharField(source="raw_output", read_only=True)
+    duration_ms = serializers.IntegerField(source="execution_time_ms", read_only=True)
+
     class Meta:
         model = AgentExecution
-        fields = ("id", "agent_type", "stage", "message", "prompt_used", "raw_output",
-                  "execution_time_ms", "confidence_score", "prompt_version", "created_at")
+        fields = ("id", "agent_type", "stage", "message", "prompt_text", "output_text",
+                  "confidence_score", "duration_ms", "created_at")
         read_only_fields = fields
