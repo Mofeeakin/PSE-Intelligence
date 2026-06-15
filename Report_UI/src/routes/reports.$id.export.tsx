@@ -108,8 +108,9 @@ function ExportPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      setDownloadError(`Failed to download ${format.toUpperCase()}. Please try again.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setDownloadError(`Failed to download ${format.toUpperCase()}: ${msg}`);
     } finally {
       setDownloading(null);
     }

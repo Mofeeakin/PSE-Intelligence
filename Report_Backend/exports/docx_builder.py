@@ -252,8 +252,9 @@ def _add_doc_info_table(doc: Document, report: Report):
         full = report.user.get_full_name()
         author_name = full if full.strip() else report.user.username
 
+    std_code = report.standard.code if report.standard else "N/A"
     rows_data = [
-        ("DOCUMENT REFERENCE", f"PSE-{report.id:04d}-{report.standard.code}"),
+        ("DOCUMENT REFERENCE", f"PSE-{report.id:04d}-{std_code}"),
         ("VERSION",            "1.0"),
         ("DATE OF CREATION",   _date.today().strftime("%d %B %Y")),
         ("DOCUMENT AUTHOR",    author_name or "PSE Consulting"),
@@ -716,10 +717,13 @@ def _add_score_summary(doc: Document, report: Report):
     tbl.style = "Light Shading"
     _header_row(tbl, ["Dimension", "Score", "Weight"])
 
+    def _fmt(v) -> str:
+        return f"{float(v):.1f}%" if v is not None else "N/A"
+
     rows_data = [
-        ("Section Score",     f"{score.section_score:.1f}%",     "40%"),
-        ("Evidence Score",    f"{score.evidence_score:.1f}%",    "35%"),
-        ("Consistency Score", f"{score.consistency_score:.1f}%", "25%"),
+        ("Section Score",     _fmt(score.section_score),     "40%"),
+        ("Evidence Score",    _fmt(score.evidence_score),    "35%"),
+        ("Consistency Score", _fmt(score.consistency_score), "25%"),
     ]
     for i, (dim, val, wt) in enumerate(rows_data, start=1):
         _cell_text(tbl.rows[i].cells[0], dim)
@@ -728,7 +732,8 @@ def _add_score_summary(doc: Document, report: Report):
 
     doc.add_paragraph()
     total_p = doc.add_paragraph()
-    r = total_p.add_run(f"Overall Score: {score.total_score:.1f}%  |  Status: {score.status}")
+    total_str = _fmt(score.total_score)
+    r = total_p.add_run(f"Overall Score: {total_str}  |  Status: {score.status or 'N/A'}")
     _style_run(r, size_pt=13, bold=True, colour=DARK_NAVY)
     doc.add_paragraph()
 
@@ -846,21 +851,26 @@ def _add_gap_register(doc: Document, report: Report, service_type: str):
         colour = get_colour(rating, service_type)
         cells = tbl.rows[row_idx].cells
 
+        req_code = gap.requirement.code if gap.requirement else "N/A"
+        req_text = (gap.requirement.text[:70] if gap.requirement else "") or ""
+        issue = gap.issue or ""
+        severity = gap.severity or "medium"
+
         if is_gap:
             values = [
-                gap.requirement.code,
-                gap.requirement.text[:70],
-                gap.issue,
+                req_code,
+                req_text,
+                issue,
                 colour["label"],
-                gap.severity.capitalize(),
+                severity.capitalize(),
             ]
         else:
             values = [
-                gap.requirement.code,
-                gap.requirement.text[:70],
-                gap.issue,
+                req_code,
+                req_text,
+                issue,
                 colour["label"],
-                gap.severity.upper(),
+                severity.upper(),
             ]
 
         for ci, val in enumerate(values):
