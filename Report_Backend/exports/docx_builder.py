@@ -292,7 +292,7 @@ def _insert_toc_field(doc: Document) -> None:
 
     r_instr = p.add_run()
     instr = OxmlElement("w:instrText")
-    instr.set("xml:space", "preserve")
+    instr.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
     instr.text = ' TOC \\o "1-3" \\h \\z \\u '
     r_instr._r.append(instr)
 
