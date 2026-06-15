@@ -101,6 +101,7 @@ export interface ReportSummary {
   organisation: string;
   department?: string;
   standard: { code: string; name: string };
+  project?: number | null;
   service_type?: string;
   status: string;
   progress_pct: number;

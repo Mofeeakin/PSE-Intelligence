@@ -1,11 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PageHeader, StatusPill } from "@/components/AppShell";
-import { projects as projectsApi, admin as adminApi } from "@/lib/api-client";
+import { projects as projectsApi, admin as adminApi, reports as reportsApi } from "@/lib/api-client";
+import type { ReportSummary } from "@/lib/api-client";
 import { useStore } from "@/lib/store";
 import type { Project, AdminUser } from "@/lib/types";
 import { ChevronLeft, UserPlus, X, Loader2, Download } from "lucide-react";
-import { reports as reportsApi } from "@/lib/api-client";
 
 export const Route = createFileRoute("/projects/$id")({
   head: () => ({ meta: [{ title: "Project Detail — Compliance Intelligence" }] }),
@@ -19,7 +19,7 @@ function ProjectDetailPage() {
   const role = currentUser?.role ?? "user";
 
   const [project, setProject] = useState<Project | null>(null);
-  const [projectReports, setProjectReports] = useState<Array<{ id: number; title: string; status: string; updated_at: string }>>([]);
+  const [projectReports, setProjectReports] = useState<ReportSummary[]>([]);
   const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -31,15 +31,14 @@ function ProjectDetailPage() {
 
   const load = () => {
     setLoading(true);
+    const projId = Number(id);
     Promise.all([
       projectsApi.get(id),
       reportsApi.list(),
     ]).then(([proj, allReports]) => {
       setProject(proj as unknown as Project);
-      const projId = Number(id);
       setProjectReports(
-        (allReports as Array<{ id: number; title: string; status: string; updated_at: string; project?: number }>)
-          .filter((r) => r.project === projId)
+        (allReports as ReportSummary[]).filter((r) => r.project === projId)
       );
     }).catch(() => {})
       .finally(() => setLoading(false));

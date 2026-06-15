@@ -65,16 +65,21 @@ class ComplianceScoreSerializer(serializers.ModelSerializer):
 
 
 class ReportListSerializer(serializers.ModelSerializer):
-    standard_code = serializers.CharField(source="standard.code", read_only=True)
+    standard = serializers.SerializerMethodField()
+    project = serializers.IntegerField(source="project_id", read_only=True, allow_null=True)
     compliance_score = ComplianceScoreSerializer(read_only=True)
 
     class Meta:
         model = Report
         fields = (
-            "id", "title", "organisation", "standard_code", "service_type", "status",
-            "current_stage", "progress_pct", "created_at", "updated_at", "compliance_score",
+            "id", "title", "organisation", "department", "standard", "project",
+            "service_type", "status", "current_stage", "progress_pct",
+            "created_at", "updated_at", "compliance_score",
         )
         read_only_fields = fields
+
+    def get_standard(self, obj):
+        return {"code": obj.standard.code, "name": obj.standard.name}
 
 
 class ReportDetailSerializer(serializers.ModelSerializer):
