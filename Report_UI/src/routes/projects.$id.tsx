@@ -5,7 +5,7 @@ import { projects as projectsApi, admin as adminApi, reports as reportsApi } fro
 import type { ReportSummary } from "@/lib/api-client";
 import { useStore } from "@/lib/store";
 import type { Project, AdminUser } from "@/lib/types";
-import { ChevronLeft, UserPlus, X, Loader2, Download } from "lucide-react";
+import { ChevronLeft, UserPlus, X, Loader2, Download, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/projects/$id")({
   head: () => ({ meta: [{ title: "Project Detail — Compliance Intelligence" }] }),
@@ -114,7 +114,15 @@ function ProjectDetailPage() {
           <div className="bg-card border border-border rounded-sm">
             <div className="px-6 py-4 flex items-center justify-between border-b border-border">
               <h2 className="font-display text-base font-semibold">Reports</h2>
-              <span className="label-eyebrow">{projectReports.length}</span>
+              <div className="flex items-center gap-3">
+                <span className="label-eyebrow">{projectReports.length}</span>
+                <button
+                  onClick={() => navigate({ to: "/wizard", search: { draft: undefined, project: id } })}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-sm hover:opacity-90 transition-opacity"
+                >
+                  <Plus className="h-3 w-3" /> New Report
+                </button>
+              </div>
             </div>
             {projectReports.length === 0 ? (
               <p className="px-6 py-8 text-sm text-muted-foreground text-center">No reports in this project yet.</p>

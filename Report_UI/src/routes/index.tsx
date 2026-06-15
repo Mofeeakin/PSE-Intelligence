@@ -386,7 +386,7 @@ function StaffDashboard() {
         title="My Tasks"
         description="Reports assigned to you, your drafts, and submission status."
         actions={
-          <Link to="/wizard" search={{ draft: undefined }}
+          <Link to="/wizard" search={{ draft: undefined, project: undefined }}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90 transition-opacity">
             <Plus className="h-4 w-4" /> New Report
           </Link>
@@ -459,7 +459,7 @@ function StaffDashboard() {
                   <td className="px-6 py-4 text-right">
                     <div className="inline-flex items-center gap-1 flex-wrap justify-end">
                       {r.status === "Draft" ? (
-                        <button onClick={() => navigate({ to: "/wizard", search: { draft: r.id } })}
+                        <button onClick={() => navigate({ to: "/wizard", search: { draft: r.id, project: undefined } })}
                           className="px-2.5 py-1.5 text-xs rounded-sm bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20">
                           Resume Draft
                         </button>

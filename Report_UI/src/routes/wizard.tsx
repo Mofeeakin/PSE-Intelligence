@@ -10,6 +10,7 @@ export const Route = createFileRoute("/wizard")({
   head: () => ({ meta: [{ title: "New Report — Compliance Intelligence" }] }),
   validateSearch: (search: Record<string, unknown>) => ({
     draft: typeof search.draft === "string" ? search.draft : undefined,
+    project: typeof search.project === "string" ? search.project : undefined,
   }),
   component: Wizard,
 });
@@ -38,14 +39,19 @@ const SERVICE_TYPE_META: Record<ServiceType, { icon: React.ComponentType<{classN
 
 function Wizard() {
   const navigate = useNavigate();
-  const { draft: draftQuery } = useSearch({ from: "/wizard" });
+  const { draft: draftQuery, project: projectQuery } = useSearch({ from: "/wizard" });
   const { draft, setDraft, resetDraft, addEvidence, removeEvidence, initQuestionnaire, setAnswer, generate } = useStore();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [projectId, setProjectId] = useState<number | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (projectQuery) setProjectId(Number(projectQuery));
+  }, [projectQuery]);
 
   // Load existing draft when ?draft=<id> is present
   useEffect(() => {
@@ -76,6 +82,7 @@ function Wizard() {
     service_type: draft.serviceType,
     submissions: [],
     wizard_answers: draft.questionnaire,
+    ...(projectId ? { project_id: projectId } : {}),
     ...(generate ? {} : { generate: false }),
   });
 
@@ -274,7 +281,7 @@ function Wizard() {
         </div>
 
         <aside className="col-span-12 lg:col-span-4">
-          <DraftSummary savedId={savedId} />
+          <DraftSummary savedId={savedId} projectId={projectId} />
         </aside>
       </div>
     </>
@@ -484,7 +491,7 @@ function EvidenceStep({ evidence, onAdd, onRemove }: {
   );
 }
 
-function DraftSummary({ savedId }: { savedId: number | null }) {
+function DraftSummary({ savedId, projectId }: { savedId: number | null; projectId: number | null }) {
   const draft = useStore((s) => s.draft);
   return (
     <div className="bg-card border border-border rounded-sm p-5 sticky top-24">
@@ -497,6 +504,7 @@ function DraftSummary({ savedId }: { savedId: number | null }) {
         )}
       </div>
       <dl className="space-y-3 text-sm">
+        {projectId && <SumRow k="Project" v={`#${projectId}`} mono />}
         <SumRow k="Type" v={draft.type ?? "—"} mono />
         <SumRow k="Title" v={draft.title || "—"} />
         <SumRow k="Organization" v={draft.organization || "—"} />
