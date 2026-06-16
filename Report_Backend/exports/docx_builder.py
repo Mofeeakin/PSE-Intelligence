@@ -22,17 +22,21 @@ Audit Report structure — exact replica of the Reflex Pay company template:
   10. Audit conclusions and audit recommendation — Yes/No checklist table.
   Colour is applied to the STATUS cell only; all other table cells are white.
 
-Gap Assessment Report structure (Phase-1 stopgap — full Sterling-template
-rebuild is a separate later pass, see project plan):
+Gap Assessment Report structure — exact replica of the Sterling company template:
   Cover Page
   Document Information Table
   Table of Contents
-  Executive Summary (prose) — now rendered immediately after the TOC
-  Score Summary
-  CIRC Rating Legend (table)
-  Scope + remaining sections (prose / Gap Findings tables, de-zebra'd)
-  Gap / Non-Conformity Register (de-zebra'd)
-  Conclusion
+  Executive Summary
+  Gap assessment Details (criteria | objectives | method | scope + info table)
+  Gap assessment Findings Definition (Status) + CIRC legend (plain colour list)
+  Gap Assessment Detailed Findings — Management Clauses: each core ISO clause
+      (4-10) as its own Heading-3 + 6-column table (Clause No. | Clause Title |
+      Detailed Control | Findings | Recommendations | Implementation Status)
+  ISMS (Annex A Control) Findings — ONE continuous table for all 4 Annex A
+      groups (5/6/7/8 in-table divider rows), not separate sections
+  Summary of Findings — structured (Overall Outcome | Key Strengths | Main
+      Gaps & Areas for Improvement | Conclusion) + ratings-distribution table
+  Colour is applied to the Implementation Status cell only.
 
 Ratings colour scheme:
   Audit  : A (green) | OFI/OBS (blue) | MiNC (amber) | MaNC (red)
@@ -66,6 +70,7 @@ logger = logging.getLogger(__name__)
 
 LOGO_PATH = Path(__file__).parent / "assets" / "pse_logo.png"
 JSON_PREFIX = "__JSON__:"
+SUMMARY_PREFIX = "__SUMMARY__:"  # gap-assessment "Summary of Findings" structured JSON tag
 
 # Corporate colours
 CORP_BLUE  = "002DA8"   # PSE corporate blue
@@ -169,6 +174,17 @@ def _format_core_clause_label(section_name: str) -> str:
     parts = name.split(" ", 1)
     if len(parts) == 2 and parts[0].replace(".", "").isdigit():
         return f"Clause {parts[0]} — {parts[1]}"
+    return name
+
+
+def _format_gap_clause_heading(section_name: str) -> str:
+    """Turn '§4 Context' into 'Clause 4: Context' for a real Heading-3 (Sterling
+    template style — colon, not em-dash, and an actual heading so it surfaces
+    in the Word TOC at level 3)."""
+    name = section_name.lstrip("§").strip()
+    parts = name.split(" ", 1)
+    if len(parts) == 2 and parts[0].replace(".", "").isdigit():
+        return f"Clause {parts[0]}: {parts[1]}"
     return name
 
 
@@ -389,32 +405,31 @@ def _add_toc(doc: Document, report, is_gap: bool):
 # ── Rating Legend (gap assessment only) ──────────────────────────────────────
 
 def _add_legend(doc: Document, service_type: str):
-    """Gap assessment only — renders CIRC rating table."""
+    """
+    Gap assessment only — renders the CIRC rating legend matching Sterling's
+    plain 1-column colour-filled list (no description column, no heading
+    style — Sterling shows it as a bold lead-in paragraph, not a TOC heading).
+    """
+    label_p = doc.add_paragraph()
+    label_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    r = label_p.add_run("CIRC OPINION RATING")
+    _style_run(r, size_pt=10, bold=True, colour=DARK_NAVY)
+
+    # Only the three ratings actually assigned to findings (Fully/Partially/Not
+    # Implemented) — Sterling's legend omits "Not Applicable".
+    ordered_keys = ["fully_implemented", "partially_implemented", "not_implemented"]
     colours = GAP_RATING_COLOURS
-    heading = "CIRC Opinion Rating Legend"
-    _add_heading(doc, heading, level=2)
 
-    descriptions = {
-        "fully_implemented":     "Control fully in place with documented evidence.",
-        "partially_implemented": "Control exists but implementation is incomplete or inconsistent.",
-        "not_implemented":       "Control has not been implemented; remediation required.",
-        "not_applicable":        "Control is out of scope or not applicable to this organisation.",
-    }
+    tbl = doc.add_table(rows=len(ordered_keys), cols=1)
+    tbl.style = "Table Grid"
 
-    tbl = doc.add_table(rows=1 + len(colours), cols=2)
-    tbl.style = "Light Shading"
-    _header_row(tbl, ["Rating / Classification", "Description"])
-
-    for row_idx, (key, meta) in enumerate(colours.items(), start=1):
-        label_cell = tbl.rows[row_idx].cells[0]
-        desc_cell  = tbl.rows[row_idx].cells[1]
-        label_cell.text = meta["label"]
-        desc_cell.text  = descriptions.get(key, "")
-        _set_cell_bg(label_cell, meta["bg"])
-        if label_cell.paragraphs[0].runs:
-            _style_run(label_cell.paragraphs[0].runs[0], size_pt=9, bold=True, colour=meta["fg"])
-        if desc_cell.paragraphs[0].runs:
-            _style_run(desc_cell.paragraphs[0].runs[0], size_pt=9)
+    for row_idx, key in enumerate(ordered_keys):
+        meta = colours[key]
+        cell = tbl.rows[row_idx].cells[0]
+        cell.text = meta["label"]
+        _set_cell_bg(cell, meta["bg"])
+        if cell.paragraphs[0].runs:
+            _style_run(cell.paragraphs[0].runs[0], size_pt=9, bold=True, colour=meta["fg"])
 
     doc.add_paragraph()
 
@@ -674,6 +689,151 @@ def _add_audit_details(doc: Document, report: Report, scope_content: str):
     doc.add_page_break()
 
 
+# ── Gap Assessment Details (Sterling template equivalent of "2.0 Audit Details") ─
+
+def _add_gap_assessment_details(doc: Document, report: Report, scope_content: str):
+    """
+    Render the "Gap assessment Details" section matching the Sterling template
+    structure. Like _add_audit_details(), this is mostly static boilerplate
+    text (criteria/objectives/method are fixed wording) — only the info table
+    and the Scope sub-section are dynamic, reusing the already-generated
+    scope_content the same way _add_audit_details() does.
+    """
+    _add_heading(doc, "Gap assessment Details", level=1)
+
+    # Info table — Sterling's exact 5-row layout ───────────────────────────────
+    info_rows = [
+        ("DATE(S)",                     ""),
+        ("LOCATION(S)",                 ""),
+        ("GAP ASSESSMENTOR(S)",         "PSE Consulting"),
+        ("GAP ASSESSMENT PARTICIPANTS", ""),
+        ("SCOPE SUMMARY",               (scope_content or report.scope or "")[:300]),
+    ]
+
+    tbl = doc.add_table(rows=len(info_rows), cols=2)
+    tbl.style = "Table Grid"
+    col_widths = [Cm(5.5), Cm(11.5)]
+    for col_i, w in enumerate(col_widths):
+        for cell in tbl.columns[col_i].cells:
+            cell.width = w
+
+    for row_i, (label, value) in enumerate(info_rows):
+        lc = tbl.rows[row_i].cells[0]
+        vc = tbl.rows[row_i].cells[1]
+        lc.text = label
+        vc.text = value
+        if lc.paragraphs[0].runs:
+            _style_run(lc.paragraphs[0].runs[0], size_pt=9, bold=True)
+        if vc.paragraphs[0].runs:
+            _style_run(vc.paragraphs[0].runs[0], size_pt=9)
+
+    doc.add_paragraph()
+
+    # Gap Assessment Criteria and Reference Documents ──────────────────────────
+    _add_heading(doc, "Gap Assessment Criteria and Reference Documents", level=2)
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    r = p.add_run(
+        "The international standard for ISO/IEC 27001 (Information security) (and its "
+        "subsequent revisions) was used as the basis of the criteria for the gap assessment "
+        "programme. The gap assessment was carried out in English language."
+    )
+    _style_run(r, size_pt=10)
+    doc.add_paragraph()
+
+    # Gap Assessment Objectives ──────────────────────────────────────────────────
+    _add_heading(doc, "Gap Assessment Objectives", level=2)
+    objectives_intro = doc.add_paragraph()
+    objectives_intro.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    r = objectives_intro.add_run(
+        "In line with the requirements of the international standards, "
+        "the overall objectives of this internal gap assessment are to:"
+    )
+    _style_run(r, size_pt=10)
+
+    objectives = [
+        "Ensure that the implemented management systems and best practices are carried out "
+        "effectively, efficiently, and economically to benefit the organisation.",
+        "Determine the conformity of the organisation's management systems with gap assessment "
+        "criteria.",
+        "Identify further opportunities for continual improvement, which may extend beyond the "
+        "criteria set out in international standards.",
+        "Provide the organisation with the internal assurance that the management systems are "
+        "effectively managed and risks to the business are minimised.",
+    ]
+    for obj in objectives:
+        p = doc.add_paragraph(style="List Bullet")
+        p.clear()
+        r = p.add_run(obj)
+        _style_run(r, size_pt=10)
+    doc.add_paragraph()
+
+    # Gap Assessment Method ──────────────────────────────────────────────────────
+    _add_heading(doc, "Gap Assessment Method", level=2)
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    r = p.add_run(
+        "The gap assessment was conducted physically and virtually. The combination of checklists "
+        "and questionnaires, interviews, observation, documents, system, and record review with "
+        "the auditee was used to collect evidence to validate the effectiveness of the implemented "
+        "Information Security Management System (ISMS)."
+    )
+    _style_run(r, size_pt=10)
+    doc.add_paragraph()
+
+    # Scope of Gap Assessment ─────────────────────────────────────────────────────
+    _add_heading(doc, "Scope of Gap Assessment", level=2)
+    scope_text = scope_content or report.scope or \
+        "The gap assessment covered the organisation's Information Security Management System " \
+        "(ISMS) against the requirements of ISO/IEC 27001:2022, including all in-scope locations, " \
+        "business activities, processes, information assets, and products and services."
+    for line in scope_text.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        r = p.add_run(line)
+        _style_run(r, size_pt=10)
+        p.paragraph_format.space_after = Pt(3)
+    doc.add_paragraph()
+    doc.add_page_break()
+
+
+def _add_gap_findings_definition(doc: Document):
+    """
+    Render "Gap assessment Findings Definition (Status)" matching Sterling's
+    3-line CIRC definition, followed by the simplified colour-filled legend.
+    """
+    _add_heading(doc, "Gap assessment Findings Definition (Status)", level=1)
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    r = p.add_run(
+        "Where a discrepancy against the standard has been found, one of three types of items "
+        "has been raised as follows:"
+    )
+    _style_run(r, size_pt=10)
+
+    findings_defs = [
+        ("Fully Implemented:", "conformance with the management system or process."),
+        ("Not Implemented:", "a significant issue that represents a breakdown of the operation "
+         "of the management system or process."),
+        ("Partially Implemented:", "a single lapse that does not indicate a breakdown of the "
+         "management system or process."),
+    ]
+    for label, definition in findings_defs:
+        p = doc.add_paragraph(style="List Bullet")
+        p.clear()
+        r_bold = p.add_run(label + " ")
+        _style_run(r_bold, size_pt=10, bold=True)
+        r_def = p.add_run(definition)
+        _style_run(r_def, size_pt=10)
+    doc.add_paragraph()
+
+    _add_legend(doc, "gap_assessment")
+    doc.add_page_break()
+
+
 # ── Consolidated Audit Findings (§9) ─────────────────────────────────────────
 
 def _add_consolidated_findings(doc: Document, all_findings: list[dict]):
@@ -768,7 +928,90 @@ def _add_audit_conclusions(doc: Document):
     doc.add_paragraph()
 
 
+# ── Summary of Findings (gap assessment only — Sterling template) ────────────
+
+def _add_gap_summary_of_findings(doc: Document, section, all_clause_findings: list[dict]):
+    """
+    Render the "Summary of Findings" section matching the Sterling template:
+    Overall Outcome / Key Strengths / Main Gaps & Areas for Improvement /
+    Conclusion as bold-run paragraph labels each followed by a bullet list
+    (Conclusion gets prose instead), plus a ratings-distribution count table.
+
+    `section` is the ReportSection whose content is SUMMARY_PREFIX-tagged JSON
+    (see agents/pipeline.py._generate_conclusion). Falls back to plain prose
+    rendering if the JSON is missing/malformed, so a bad LLM response never
+    crashes the export.
+    """
+    _add_heading(doc, "Summary of Findings", level=1)
+
+    content = (section.content if section else "") or ""
+    data = None
+    if content.startswith(SUMMARY_PREFIX):
+        raw_json = content[len(SUMMARY_PREFIX):]
+        try:
+            data = json.loads(raw_json)
+        except json.JSONDecodeError:
+            logger.warning("DOCX: Failed to parse Summary of Findings JSON — falling back to prose.")
+
+    def _bullet_block(label: str, items: list):
+        p_label = doc.add_paragraph()
+        p_label.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        r = p_label.add_run(label)
+        _style_run(r, size_pt=10, bold=True)
+        for item in items or []:
+            p = doc.add_paragraph(style="List Bullet")
+            p.clear()
+            r = p.add_run(_sanitise(item))
+            _style_run(r, size_pt=10)
+        doc.add_paragraph()
+
+    if isinstance(data, dict):
+        _bullet_block("Overall Outcome", data.get("overall_outcome"))
+        _bullet_block("Key Strengths", data.get("key_strengths"))
+        _bullet_block("Main Gaps & Areas for Improvement", data.get("main_gaps"))
+
+        p_label = doc.add_paragraph()
+        r = p_label.add_run("Conclusion")
+        _style_run(r, size_pt=10, bold=True)
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        r = p.add_run(_sanitise(data.get("conclusion") or ""))
+        _style_run(r, size_pt=10)
+        doc.add_paragraph()
+    else:
+        # Fallback: render whatever text we have as plain prose.
+        _add_prose_section_body(doc, content)
+
+    # Ratings-distribution count table — computed directly from findings, no LLM.
+    counts = {"Fully Implemented": 0, "Partially Implemented": 0, "Not Implemented": 0}
+    label_map = {
+        "FI": "Fully Implemented", "Fully Implemented": "Fully Implemented",
+        "PI": "Partially Implemented", "Partially Implemented": "Partially Implemented",
+        "NI": "Not Implemented", "Not Implemented": "Not Implemented",
+    }
+    for f in all_clause_findings:
+        key = label_map.get((f.get("circ_rating") or "").strip())
+        if key:
+            counts[key] += 1
+
+    tbl = doc.add_table(rows=len(counts), cols=2)
+    tbl.style = "Table Grid"
+    for row_i, (label, count) in enumerate(counts.items()):
+        colour = get_colour_by_status(label, "gap_assessment")
+        lc, vc = tbl.rows[row_i].cells[0], tbl.rows[row_i].cells[1]
+        _cell_text(lc, label, size_pt=9, bold=True, colour=colour["fg"])
+        _set_cell_bg(lc, colour["bg"])
+        _cell_text(vc, str(count), size_pt=9, bold=True)
+        _set_cell_bg(vc, "FFFFFF")
+
+    doc.add_paragraph()
+
+
 # ── Score Summary ─────────────────────────────────────────────────────────────
+# NOTE: not currently called by build_docx() — the Sterling template has no
+# separate "Compliance Score Summary" section for gap assessments (the
+# ratings-distribution table inside _add_gap_summary_of_findings() covers
+# the equivalent role). Kept for potential reuse.
 
 def _add_score_summary(doc: Document, report: Report):
     score = getattr(report, "compliance_score", None)
@@ -907,7 +1150,119 @@ def _add_gap_findings_table(doc: Document, section_name: str, findings: list[dic
     doc.add_paragraph()
 
 
+def _add_gap_clause_table_body(doc: Document, findings: list[dict]):
+    """
+    Render a per-clause gap findings table matching Sterling's exact 6-column
+    layout: Clause No. | Clause Title | Detailed Control | Findings |
+    Recommendations | Implementation Status. No heading (caller adds the
+    Heading-3 clause divider). Only the Implementation Status cell is
+    colour-coded; all other cells are white.
+    """
+    headers = ["Clause No.", "Clause Title", "Detailed Control", "Findings",
+               "Recommendations", "Implementation Status"]
+    tbl = doc.add_table(rows=1 + len(findings), cols=len(headers))
+    tbl.style = "Table Grid"
+    _header_row(tbl, headers, bg=DARK_NAVY)
+
+    for row_idx, f in enumerate(findings, start=1):
+        cells = tbl.rows[row_idx].cells
+        rating_str = f.get("circ_rating", "Not Implemented")
+        colour = get_colour_by_status(rating_str, "gap_assessment")
+
+        findings_text = (f.get("current_state") or "").strip()
+        gap_delta = (f.get("gap_delta") or "").strip()
+        if gap_delta:
+            findings_text = f"{findings_text} {gap_delta}".strip()
+
+        _cell_text(cells[0], f.get("clause_ref") or "",               size_pt=9, bold=True)
+        _cell_text(cells[1], (f.get("control_name") or "")[:80],     size_pt=9)
+        _cell_text(cells[2], (f.get("required_state") or "")[:200],  size_pt=9)
+        _cell_text(cells[3], findings_text[:250],                     size_pt=9)
+        _cell_text(cells[4], f.get("recommendation") or "",           size_pt=9)
+        _cell_text(cells[5], colour["label"],                         size_pt=9, bold=True, colour=colour["fg"])
+        _set_cell_bg(cells[5], colour["bg"])
+
+        for ci in (0, 1, 2, 3, 4):
+            _set_cell_bg(cells[ci], "FFFFFF")
+
+    doc.add_paragraph()
+
+
+def _add_gap_annex_table(doc: Document, annex_secs: dict):
+    """
+    Render Sterling's "ISMS (Annex A Control) Findings" as ONE continuous
+    table covering all 4 Annex A groups (5/6/7/8), with a divider row
+    (first cell only) between groups — matching the source template, which
+    does NOT split Annex A into separate Heading-1 sections for gap assessment
+    (unlike the Audit Report template).
+    Columns: Control No. | Control / Clause Description | Finding | Evidence |
+    Recommendation | Implementation Status.
+    """
+    headers = ["Control No.", "Control / Clause Description", "Finding",
+               "Evidence", "Recommendation", "Implementation Status"]
+
+    # Pre-parse findings per group so we know the total row count up front.
+    group_findings: dict[int, list[dict]] = {}
+    for group_num in (5, 6, 7, 8):
+        sec = annex_secs.get(group_num)
+        if not sec:
+            continue
+        content = sec.content or ""
+        if content.startswith(JSON_PREFIX):
+            try:
+                findings = json.loads(content[len(JSON_PREFIX):])
+                if isinstance(findings, list):
+                    group_findings[group_num] = findings
+            except json.JSONDecodeError:
+                logger.warning("DOCX: Failed to parse JSON for Annex A group %s.", group_num)
+
+    if not group_findings:
+        return
+
+    total_rows = 1 + sum(1 + len(f) for f in group_findings.values())  # header + (divider + findings) per group
+    tbl = doc.add_table(rows=total_rows, cols=len(headers))
+    tbl.style = "Table Grid"
+    _header_row(tbl, headers, bg=DARK_NAVY)
+
+    row_idx = 1
+    for group_num in (5, 6, 7, 8):
+        findings = group_findings.get(group_num)
+        if findings is None:
+            continue
+
+        # Divider row — first cell only, matching Sterling's bare "5"/"6"/"7"/"8" rows
+        divider_cells = tbl.rows[row_idx].cells
+        _cell_text(divider_cells[0], str(group_num), size_pt=9, bold=True, colour="FFFFFF")
+        _set_cell_bg(divider_cells[0], DARK_NAVY)
+        for ci in range(1, len(headers)):
+            _set_cell_bg(divider_cells[ci], "FFFFFF")
+        row_idx += 1
+
+        for f in findings:
+            cells = tbl.rows[row_idx].cells
+            rating_str = f.get("circ_rating", "Not Implemented")
+            colour = get_colour_by_status(rating_str, "gap_assessment")
+            description = f"{(f.get('control_name') or '').strip()} {(f.get('required_state') or '').strip()}".strip()
+
+            _cell_text(cells[0], f.get("clause_ref") or "",            size_pt=9, bold=True)
+            _cell_text(cells[1], description[:200],                     size_pt=9)
+            _cell_text(cells[2], (f.get("current_state") or "")[:200], size_pt=9)
+            _cell_text(cells[3], (f.get("evidence_reviewed") or "")[:150], size_pt=9)
+            _cell_text(cells[4], f.get("recommendation") or "",         size_pt=9)
+            _cell_text(cells[5], colour["label"],                       size_pt=9, bold=True, colour=colour["fg"])
+            _set_cell_bg(cells[5], colour["bg"])
+
+            for ci in (0, 1, 2, 3, 4):
+                _set_cell_bg(cells[ci], "FFFFFF")
+            row_idx += 1
+
+    doc.add_paragraph()
+
+
 # ── Gap/Non-Conformity register (from Gap DB rows) ───────────────────────────
+# NOTE: not currently called by build_docx() for either report type — neither
+# the Reflex Pay nor Sterling template has a section matching this layout
+# (their findings tables already serve this role). Kept for potential reuse.
 
 def _add_gap_register(doc: Document, report: Report, service_type: str):
     gaps = list(report.gaps.select_related("requirement").all())
@@ -999,40 +1354,113 @@ def build_docx(report: Report) -> bytes:
     all_clause_findings: list[dict] = []
 
     if is_gap:
-        # ── Gap Assessment path ────────────────────────────────────────────
-        # Phase-1 stopgap: Executive Summary right after the TOC, then Score
-        # Summary + Legend + Scope + clause findings + register + Conclusion.
-        # (Full Sterling-template structural rebuild is a separate later pass.)
-        exec_summary_content = ""
-        other_sections = []
-        for sec in sections:
-            if "executive summary" in sec.section_name.lower():
-                exec_summary_content = sec.content or ""
-            else:
-                other_sections.append(sec)
+        # ── Gap Assessment path — exact replica of the Sterling template ────
+        # Executive Summary
+        # Gap assessment Details (criteria/objectives/method/scope + info table)
+        # Gap assessment Findings Definition (Status) + CIRC legend
+        # Gap Assessment Detailed Findings — Management Clauses: Heading-3 per
+        #     core ISO clause (4-10), each with its own 6-column table
+        # ISMS (Annex A Control) Findings — ONE continuous table for all 4
+        #     Annex A groups (5/6/7/8 divider rows), not separate sections
+        # Summary of Findings — structured (Overall Outcome/Key Strengths/
+        #     Main Gaps/Conclusion) + ratings-distribution table
 
+        exec_summary_content = ""
+        scope_content = ""
+        summary_section = None
+        core_secs: list = []
+        annex_secs: dict = {}
+        other_secs: list = []
+
+        for sec in sections:
+            name_lower = sec.section_name.lower()
+            if "executive summary" in name_lower:
+                exec_summary_content = sec.content or ""
+                continue
+            if "summary of findings" in name_lower:
+                summary_section = sec
+                continue
+            if "conclusion" in name_lower:
+                # Superseded by Summary of Findings for gap assessments — see
+                # agents/pipeline.py._generate_conclusion. Skip any stale rows.
+                continue
+            if "scope" in name_lower and not (sec.content or "").startswith(JSON_PREFIX):
+                scope_content = sec.content or ""
+                continue
+
+            kind, key = _classify_clause_section(sec.section_name)
+            if kind == "core":
+                core_secs.append(sec)
+            elif kind == "annex":
+                annex_secs[key] = sec
+            else:
+                other_secs.append(sec)
+
+        # Executive Summary
         if exec_summary_content:
             _add_prose_section(doc, "Executive Summary", exec_summary_content)
             doc.add_page_break()
 
-        _add_score_summary(doc, report)
-        _add_legend(doc, service_type)
-        doc.add_paragraph()
+        # Gap assessment Details
+        _add_gap_assessment_details(doc, report, scope_content)
 
-        for sec in other_sections:
+        # Gap assessment Findings Definition (Status) + CIRC legend
+        _add_gap_findings_definition(doc)
+
+        # Gap Assessment Detailed Findings — Management Clauses
+        if core_secs:
+            _add_heading(doc, "Gap Assessment Detailed Findings", level=1)
+            _add_heading(doc, "Management Clauses", level=2)
+            for sec in core_secs:
+                content = sec.content or ""
+                _add_heading(doc, _format_gap_clause_heading(sec.section_name), level=3)
+                if content.startswith(JSON_PREFIX):
+                    raw_json = content[len(JSON_PREFIX):]
+                    try:
+                        findings = json.loads(raw_json)
+                        if isinstance(findings, list) and findings:
+                            all_clause_findings.extend(findings)
+                            _add_gap_clause_table_body(doc, findings)
+                            continue
+                    except json.JSONDecodeError:
+                        logger.warning("DOCX: Failed to parse JSON for section '%s'.", sec.section_name)
+                _add_prose_section_body(doc, content)
+            doc.add_page_break()
+
+        # ISMS (Annex A Control) Findings — single combined table
+        if annex_secs:
+            _add_heading(doc, "ISMS (Annex A Control) Findings", level=1)
+            for sec in annex_secs.values():
+                content = sec.content or ""
+                if content.startswith(JSON_PREFIX):
+                    try:
+                        findings = json.loads(content[len(JSON_PREFIX):])
+                        if isinstance(findings, list):
+                            all_clause_findings.extend(findings)
+                    except json.JSONDecodeError:
+                        pass
+            _add_gap_annex_table(doc, annex_secs)
+            doc.add_page_break()
+
+        # Unclassified sections (non-ISO27001 standards) — generic fallback
+        for sec in other_secs:
             content = sec.content or ""
             if content.startswith(JSON_PREFIX):
                 raw_json = content[len(JSON_PREFIX):]
                 try:
                     findings = json.loads(raw_json)
                     if isinstance(findings, list) and findings:
+                        all_clause_findings.extend(findings)
                         _add_gap_findings_table(doc, sec.section_name, findings)
                         continue
                 except json.JSONDecodeError:
                     logger.warning("DOCX: Failed to parse JSON for section '%s'.", sec.section_name)
             _add_prose_section(doc, sec.section_name, content)
 
-        _add_gap_register(doc, report, service_type)
+        # Summary of Findings (structured) — supersedes the plain Conclusion
+        # for gap assessments; Sterling has no separate top-level Conclusion
+        # or Gap/Non-Conformity Register, so neither is rendered here.
+        _add_gap_summary_of_findings(doc, summary_section, all_clause_findings)
 
     else:
         # ── Audit Report path — exact replica of the Reflex Pay template ────

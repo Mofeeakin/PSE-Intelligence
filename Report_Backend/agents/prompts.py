@@ -201,6 +201,7 @@ ISO REFERENCE CONTEXT (use this to support and explain findings):
   "gap_delta": "The specific difference between current and required state",
   "circ_rating": "Fully Implemented | Partially Implemented | Not Implemented | Not Applicable",
   "priority": "High | Medium | Low",
+  "evidence_reviewed": "What evidence was cited or what absence of evidence was noted",
   "recommendation": "2-3 specific, actionable recommendations citing the relevant ISO clause"
 }"""
         rating_rules = """\
@@ -473,4 +474,74 @@ WRITE THE FOLLOWING STRUCTURE (in order, as continuous prose paragraphs — no b
 FORMATTING RULES (strict): Output pure prose paragraphs only. Do NOT number or label these five points in
 your output — blend them into continuous paragraphs. No markdown ("**bold**", "#"/"##"/"###" headers,
 list markers). No headers, no bullet points, no score tables. Do not restate the section title."""
+
+
+# ── Summary of Findings prompt (gap assessment only — Sterling template) ──────
+
+def summary_of_findings_prompt(
+    report,
+    score,
+    all_parsed_findings: list,
+) -> str:
+    """
+    Gap-assessment-only equivalent of conclusion_prompt(), matching the
+    Sterling template's "Summary of Findings" section: structured JSON with
+    Overall Outcome / Key Strengths / Main Gaps / Conclusion, instead of a
+    single prose paragraph. Generated AFTER scoring (same timing as
+    conclusion_prompt()) so the real score is embedded.
+    """
+    score_val = round(score.total_score, 1) if score else 0.0
+    status    = score.status if score else "PENDING"
+    org       = report.organisation or "the organisation"
+    dept      = report.department or ""
+
+    major_findings, minor_findings, compliant_clauses = [], [], []
+    for f in (all_parsed_findings or []):
+        rating = (f.get("circ_rating") or "").strip()
+        clause = f.get("clause_ref", "?")
+        if rating in ("Not Implemented", "NI"):
+            desc = (f.get("gap_delta") or f.get("current_state") or "")[:120]
+            major_findings.append(f"  • {clause}: {desc}")
+        elif rating in ("Partially Implemented", "PI"):
+            desc = (f.get("gap_delta") or f.get("current_state") or "")[:100]
+            minor_findings.append(f"  • {clause}: {desc}")
+        else:
+            compliant_clauses.append(clause)
+
+    findings_block = ""
+    if major_findings:
+        findings_block += "\nNot Implemented:\n" + "\n".join(major_findings[:8])
+    if minor_findings:
+        findings_block += "\n\nPartially Implemented:\n" + "\n".join(minor_findings[:8])
+    if compliant_clauses:
+        findings_block += f"\n\nFully Implemented: {', '.join(compliant_clauses[:12])}"
+    if not findings_block:
+        findings_block = "  (No detailed findings available — write based on the score.)"
+
+    scope_summary = (report.scope or "the declared ISMS boundary")[:300]
+
+    return f"""\
+Write the SUMMARY OF FINDINGS section of this ISO 27001 gap assessment report, as a structured
+JSON object — not prose paragraphs. Use formal British English.
+
+CONTEXT (facts — do not contradict):
+  Organisation     : {org}{f" — {dept}" if dept else ""}
+  ISMS Scope       : {scope_summary}
+  Compliance Score : {score_val:.1f}%  |  Status: {status}
+
+FINDINGS DIGEST:
+{findings_block}
+
+Return a JSON object with EXACTLY these keys:
+{{
+  "overall_outcome": ["2-3 short bullet sentences summarising the overall ISMS conformity posture"],
+  "key_strengths": ["3-5 short bullet sentences naming genuine strengths, drawn from the Fully Implemented clauses above — cite ISO clauses where relevant"],
+  "main_gaps": ["3-5 short bullet sentences naming the most significant Not/Partially Implemented gaps and why they matter — cite ISO clauses"],
+  "conclusion": "1 short paragraph (60-90 words) giving the overall verdict, referencing the compliance score and recommending next steps"
+}}
+
+FORMATTING RULES (strict):
+- Each bullet sentence must be plain prose — no markdown ("**bold**", "#"/"##"/"###" headers, list markers).
+- Do not restate the section title or write memo-style headers.
+- Return ONLY the JSON object. Start your response with {{ and end with }}. No text outside the JSON."""
 

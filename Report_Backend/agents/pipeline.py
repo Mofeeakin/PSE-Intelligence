@@ -21,6 +21,11 @@ from agents.providers import get_provider
 
 logger = logging.getLogger(__name__)
 
+# Tag prefix for the gap-assessment "Summary of Findings" structured JSON
+# content, mirroring the JSON_PREFIX convention already used by
+# iso27001_agent.py / docx_builder.py for per-clause findings.
+SUMMARY_PREFIX = "__SUMMARY__:"
+
 STAGES = [
     ("Router", "Routing report to specialised agents based on standard type."),
     ("RAG", "Retrieving relevant knowledge context and evidence references."),
@@ -156,17 +161,59 @@ class ReportPipeline:
     @staticmethod
     def _generate_conclusion(report: Report, score):
         """
-        Generate the Conclusion section using the REAL compliance score.
+        Generate the closing section using the REAL compliance score.
         Called AFTER ScoringService so score.total_score is accurate.
         Reuses all_parsed_findings stashed on the report object by ISO27001Agent.
+
+        Audit reports: unchanged — a single prose "Conclusion" section.
+        Gap assessments: a structured "Summary of Findings" section (Sterling
+        template equivalent — Overall Outcome / Key Strengths / Main Gaps /
+        Conclusion), replacing the audit-style single-paragraph Conclusion.
         """
         all_parsed_findings = getattr(report, "_all_parsed_findings", [])
         conclusion_order    = getattr(report, "_conclusion_order", 13)
         service_type        = getattr(report, "service_type", "audit_report") or "audit_report"
         system_prompt       = P.get_system_prompt(service_type)
+        provider            = get_provider()
+
+        if service_type == "gap_assessment":
+            summary_prompt  = P.summary_of_findings_prompt(report, score, all_parsed_findings)
+            raw_content     = provider.generate([
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": summary_prompt},
+            ])
+
+            # Best-effort JSON validation; store raw text untagged if it fails
+            # so docx_builder's fallback prose renderer still has something
+            # sensible to show rather than crashing the export.
+            text = raw_content.strip()
+            start, end = text.find("{"), text.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                tagged_content = f"{SUMMARY_PREFIX}{text[start:end + 1]}"
+            else:
+                tagged_content = text
+
+            report.sections.filter(section_name="Summary of Findings").delete()
+            report.sections.filter(section_name="Conclusion").delete()
+
+            ReportSection.objects.create(
+                report=report,
+                section_name="Summary of Findings",
+                content=tagged_content,
+                agent_type="ISO27001Agent",
+                confidence_score=0.92,
+                evidence_refs=[],
+                order=conclusion_order,
+            )
+            _log(
+                report,
+                "ISO27001Agent",
+                "Summary of Findings",
+                f"Summary of Findings generated post-scoring (score={score.total_score:.1f}%, status={score.status}).",
+            )
+            return
 
         conc_prompt  = P.conclusion_prompt(report, score, all_parsed_findings, service_type)
-        provider     = get_provider()
         conc_content = provider.generate([
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": conc_prompt},
