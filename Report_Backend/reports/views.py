@@ -292,8 +292,11 @@ class ProjectDetailView(APIView):
         return Response(s.data)
 
     def delete(self, request, pk):
-        if get_role(request.user) not in ("super_admin", "sub_admin"):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+        if get_role(request.user) != "super_admin":
+            return Response(
+                {"detail": "Only a Super Admin can delete a project."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         project = self._get_project(request, pk)
         project.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

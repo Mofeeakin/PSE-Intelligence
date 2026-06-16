@@ -5,7 +5,7 @@ import { projects as projectsApi, admin as adminApi, reports as reportsApi } fro
 import type { ReportSummary } from "@/lib/api-client";
 import { useStore } from "@/lib/store";
 import type { Project, AdminUser } from "@/lib/types";
-import { ChevronLeft, UserPlus, X, Loader2, Download, Plus } from "lucide-react";
+import { ChevronLeft, UserPlus, X, Loader2, Download, Plus, Trash2, AlertTriangle } from "lucide-react";
 
 export const Route = createFileRoute("/projects/$id")({
   head: () => ({ meta: [{ title: "Project Detail — Compliance Intelligence" }] }),
@@ -28,6 +28,9 @@ function ProjectDetailPage() {
   const [assigningReportId, setAssigningReportId] = useState<number | null>(null);
   const [assignUserId, setAssignUserId] = useState<number | "">("");
   const [assigning, setAssigning] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const load = () => {
     setLoading(true);
@@ -86,6 +89,18 @@ function ProjectDetailPage() {
     } catch { /* ignore */ } finally { setAssigning(false); }
   };
 
+  const handleDeleteProject = async () => {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await projectsApi.delete(id);
+      navigate({ to: "/projects" });
+    } catch {
+      setDeleteError("Failed to delete project. Please try again.");
+      setDeleting(false);
+    }
+  };
+
   if (loading) return (
     <div className="flex items-center gap-2 justify-center py-20 text-muted-foreground">
       <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -94,6 +109,7 @@ function ProjectDetailPage() {
   if (!project) return <div className="py-20 text-center text-muted-foreground">Project not found.</div>;
 
   const canManage = role === "super_admin" || role === "sub_admin";
+  const canDelete = role === "super_admin";
 
   return (
     <>
@@ -102,11 +118,31 @@ function ProjectDetailPage() {
         title={project.name}
         description={project.description || project.client_details || ""}
         actions={
-          <Link to="/projects" className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
-            <ChevronLeft className="h-4 w-4" /> All Projects
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/projects" className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+              <ChevronLeft className="h-4 w-4" /> All Projects
+            </Link>
+            {canDelete && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-destructive border border-destructive/30 rounded-sm hover:bg-destructive/10 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete Project
+              </button>
+            )}
+          </div>
         }
       />
+
+      {showDeleteConfirm && (
+        <DeleteProjectModal
+          projectName={project.name}
+          deleting={deleting}
+          error={deleteError}
+          onCancel={() => { setShowDeleteConfirm(false); setDeleteError(""); }}
+          onConfirm={handleDeleteProject}
+        />
+      )}
 
       <div className="grid grid-cols-12 gap-8">
         {/* Reports column */}
@@ -275,6 +311,49 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between items-baseline">
       <span className="text-sm text-muted-foreground">{label}</span>
       <span className="text-sm font-medium">{value}</span>
+    </div>
+  );
+}
+
+function DeleteProjectModal({ projectName, deleting, error, onCancel, onConfirm }: {
+  projectName: string;
+  deleting: boolean;
+  error: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-card border border-border rounded-sm shadow-xl w-full max-w-sm mx-4">
+        <div className="px-6 py-5">
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 rounded-full bg-destructive/10 grid place-items-center shrink-0">
+              <AlertTriangle className="h-4.5 w-4.5 text-destructive" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-base">Delete this project?</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Are you sure you want to delete <span className="font-medium text-foreground">"{projectName}"</span>?
+                This will permanently remove the project and cannot be undone.
+              </p>
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-destructive mt-3">{error}</p>}
+
+          <div className="flex justify-end gap-2 mt-5">
+            <button onClick={onCancel} disabled={deleting}
+              className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40">
+              Cancel
+            </button>
+            <button onClick={onConfirm} disabled={deleting}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm bg-destructive text-destructive-foreground rounded-sm hover:opacity-90 disabled:opacity-50">
+              {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {deleting ? "Deleting…" : "Yes, delete project"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
