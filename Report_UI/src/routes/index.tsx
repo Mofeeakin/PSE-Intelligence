@@ -30,7 +30,7 @@ function Dashboard() {
 
   if (role === "super_admin") return <SuperAdminDashboard />;
   if (role === "sub_admin") return <SubAdminDashboard />;
-  return <StaffDashboard />;
+  return <ConsultantDashboard />;
 }
 
 // ── Super Admin Dashboard ─────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ function SuperAdminDashboard() {
   }, [loadReports]);
 
   const pendingReview = reports.filter((r) => r.status === "Pending Review");
-  const staffCount = allUsers.filter((u) => u.role === "user").length;
+  const consultantCount = allUsers.filter((u) => u.role === "user").length;
   const pmCount = allUsers.filter((u) => u.role === "sub_admin").length;
   const avg = Math.round(
     reports.filter(r => r.score).reduce((a, r) => a + (r.score?.final ?? 0), 0) /
@@ -87,7 +87,7 @@ function SuperAdminDashboard() {
 
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <KpiCard icon={<Users className="h-4 w-4" />} label="Total Users" value={String(allUsers.length)} sub={`${pmCount} PM · ${staffCount} staff`} />
+        <KpiCard icon={<Users className="h-4 w-4" />} label="Total Users" value={String(allUsers.length)} sub={`${pmCount} PM · ${consultantCount} consultants`} />
         <KpiCard icon={<FolderOpen className="h-4 w-4" />} label="Projects" value={String(projects.length)} sub="Active client projects" />
         <KpiCard icon={<FileCheck2 className="h-4 w-4" />} label="All Reports" value={String(reports.length)} sub="Across all projects" />
         <KpiCard icon={<ClipboardCheck className="h-4 w-4" />} label="Pending Review" value={String(pendingReview.length)} sub="Awaiting approval" accent={pendingReview.length > 0} />
@@ -355,9 +355,9 @@ function SubAdminDashboard() {
   );
 }
 
-// ── Staff / Auditor Dashboard ─────────────────────────────────────────────────
+// ── Consultant / Auditor Dashboard ────────────────────────────────────────────
 
-function StaffDashboard() {
+function ConsultantDashboard() {
   const reports = useStore((s) => s.reports);
   const loadReports = useStore((s) => s.loadReports);
   const navigate = useNavigate();
@@ -584,7 +584,7 @@ function RolePill({ role }: { role: string }) {
     sub_admin: "bg-info/15 text-[oklch(0.4_0.12_240)]",
     user: "bg-muted text-muted-foreground",
   };
-  const label: Record<string, string> = { super_admin: "Super Admin", sub_admin: "PM", user: "Staff" };
+  const label: Record<string, string> = { super_admin: "Super Admin", sub_admin: "PM", user: "Consultant" };
   return (
     <span className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-sm ${map[role] ?? "bg-muted"}`}>
       {label[role] ?? role}

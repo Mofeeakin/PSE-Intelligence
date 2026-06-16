@@ -45,7 +45,7 @@ function ProjectsPage() {
       <PageHeader
         eyebrow="Project management"
         title="Projects"
-        description="Organise compliance work by client project. Assign staff and track all associated reports."
+        description="Organise compliance work by client project. Assign consultants and track all associated reports."
         actions={
           (role === "super_admin" || role === "sub_admin") ? (
             <button

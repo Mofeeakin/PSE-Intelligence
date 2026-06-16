@@ -12,7 +12,7 @@ export const Route = createFileRoute("/admin")({
 });
 
 const ROLE_OPTIONS = [
-  { value: "user",        label: "Staff / User" },
+  { value: "user",        label: "Consultant" },
   { value: "sub_admin",   label: "Project Manager / HOD" },
   { value: "super_admin", label: "Super Admin" },
 ] as const;
@@ -133,7 +133,7 @@ function CredentialsDialog({ result, onClose }: { result: CreateUserResponse; on
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
         </div>
         <div className="p-6 space-y-4">
-          <p className="text-sm text-muted-foreground">Share these credentials with the staff member. The password will not be shown again.</p>
+          <p className="text-sm text-muted-foreground">Share these credentials with the team member. The password will not be shown again.</p>
 
           <div className="bg-muted/50 border border-border rounded-sm p-4 font-mono text-sm space-y-2">
             <div className="flex justify-between items-center">
@@ -225,7 +225,7 @@ function AdminPage() {
       <PageHeader
         eyebrow="System administration"
         title="Admin Panel"
-        description="Manage user roles and create new accounts for staff. Credentials are shared by the admin."
+        description="Manage user roles and create new accounts for consultants. Credentials are shared by the admin."
         actions={
           <button onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-sm text-sm font-medium hover:opacity-90 transition-opacity">
@@ -314,7 +314,7 @@ function AdminPage() {
                 </span>
                 <p className="text-[11px] text-muted-foreground">
                   {opt.value === "super_admin" && "Full access to all projects, reports, and user management."}
-                  {opt.value === "sub_admin"   && "Can create projects, assign staff, and access project reports."}
+                  {opt.value === "sub_admin"   && "Can create projects, assign consultants, and access project reports."}
                   {opt.value === "user"        && "Can view and create reports assigned to them only."}
                 </p>
               </div>

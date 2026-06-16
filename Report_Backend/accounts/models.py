@@ -9,7 +9,7 @@ class UserProfile(models.Model):
     ROLE_CHOICES = [
         (SUPER_ADMIN, "Super Admin"),
         (SUB_ADMIN,   "Project Manager / HOD"),
-        (USER,        "Staff / User"),
+        (USER,        "Consultant"),
     ]
 
     user       = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")

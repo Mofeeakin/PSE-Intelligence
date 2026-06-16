@@ -341,7 +341,7 @@ class ReportGenerateView(APIView):
 
 
 class ReportSubmitReviewView(APIView):
-    """Staff submits a completed report for admin review."""
+    """Consultant submits a completed report for admin review."""
 
     def post(self, request, pk):
         report = get_object_or_404(Report, pk=pk)
@@ -389,7 +389,7 @@ class ReportApproveView(APIView):
 
 
 class ReportAssignView(APIView):
-    """Sub Admin or Super Admin assigns a report to a staff member."""
+    """Sub Admin or Super Admin assigns a report to a consultant."""
 
     def post(self, request, pk):
         if get_role(request.user) not in ("super_admin", "sub_admin"):

@@ -266,4 +266,4 @@ Open the exported `.docx` in Microsoft Word:
 |---|---|---|---|
 | Super Admin | `admin` | `Admin@PSE2026` | Full access |
 
-To create a Staff account for testing the auditor workflow, go to **Users & Roles → + Create User**, set role to **Staff**, and log in with the generated credentials.
+To create a Consultant account for testing the auditor workflow, go to **Users & Roles → + Create User**, set role to **Consultant**, and log in with the generated credentials.

@@ -208,7 +208,7 @@ function ProjectDetailPage() {
                                   onChange={(e) => setAssignUserId(Number(e.target.value) || "")}
                                   className="flex-1 text-sm bg-background border border-border rounded-sm px-2 py-1 focus:outline-none"
                                 >
-                                  <option value="">Select staff member…</option>
+                                  <option value="">Select consultant…</option>
                                   {allUsers.map((u) => (
                                     <option key={u.id} value={u.id}>{u.username} ({u.role})</option>
                                   ))}

@@ -7,7 +7,7 @@ import { notifications as notificationsApi, type Notification } from "@/lib/api-
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin",
   sub_admin: "Project Manager",
-  user: "Staff",
+  user: "Consultant",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
