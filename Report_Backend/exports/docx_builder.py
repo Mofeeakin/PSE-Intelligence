@@ -1,27 +1,37 @@
 """
 Build a professional DOCX compliance report matching the PSE company template standard.
 
-Audit Report structure (ISO 27001 Internal Audit — matches Reflex Pay template):
+Audit Report structure — exact replica of the Reflex Pay company template:
   Cover Page
   Document Information Table
   Table of Contents
   1.0 Executive Summary
   2.0 Audit Details  (2.1 Criteria | 2.2 Objectives | 2.3 Method | 2.4 Scope |
                       2.5 Findings Definition | 2.6 Opinion Rating Triangle)
-  3.0 … N  Clause Findings (§4–§10 + Annex A groups) — colour on Status cell only
-  §N+1  Consolidated Audit Findings
-  §N+2  Audit Conclusions and Recommendation
+  3.0 Audit Finding Definition — ALL core ISO clauses (4-10) merged into ONE
+      section, each clause group rendered as a bold sub-divider + its own
+      findings table (no page break between groups)
+  5./6./7./8. ISMS (Annex A Control) Audit Findings — one section per Annex A
+      group (Organisational/People/Physical/Technology), fixed-numbered
+      regardless of which are present. NOTE: the template itself skips "4." —
+      this numbering gap is intentional fidelity to the source document, not
+      a bug.
+  9.  Consolidated Audit Findings — comma-separated clause-ref lists per
+      rating bucket (a. MaNC | b. MiNC | c. Observations | d. OFI), each
+      bucket label is a real Heading-2 so it surfaces in the Word TOC field.
+  10. Audit conclusions and audit recommendation — Yes/No checklist table.
+  Colour is applied to the STATUS cell only; all other table cells are white.
 
-Gap Assessment Report structure:
+Gap Assessment Report structure (Phase-1 stopgap — full Sterling-template
+rebuild is a separate later pass, see project plan):
   Cover Page
   Document Information Table
   Table of Contents
+  Executive Summary (prose) — now rendered immediately after the TOC
   Score Summary
   CIRC Rating Legend (table)
-  Scope (prose)
-  Executive Summary (prose)
-  Gap Findings by Clause Group (tables)
-  Gap / Non-Conformity Register
+  Scope + remaining sections (prose / Gap Findings tables, de-zebra'd)
+  Gap / Non-Conformity Register (de-zebra'd)
   Conclusion
 
 Ratings colour scheme:
@@ -34,6 +44,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import re
 from pathlib import Path
 
 from docx import Document
@@ -88,13 +99,77 @@ def _style_run(run, size_pt: int = 10, bold: bool = False, colour: str = None, i
         run.font.color.rgb = _hex_rgb(colour)
 
 
+_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_MD_BOLD_ALT_RE = re.compile(r"__(.+?)__")
+_MD_ITALIC_RE = re.compile(r"(?<!\*)\*(?!\*)([^*\n]+?)\*(?!\*)")
+_MD_HEADER_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_MD_BULLET_RE = re.compile(r"^[\-\*]\s+", re.MULTILINE)
+
+
+def _strip_markdown(text: str) -> str:
+    """Remove markdown formatting (**bold**, __bold__, *italic*, # headers, - bullets)
+    that LLM output sometimes leaks despite prompt instructions — Word/PDF documents
+    get their structure from real headings/styles, not text symbols."""
+    text = _MD_BOLD_RE.sub(r"\1", text)
+    text = _MD_BOLD_ALT_RE.sub(r"\1", text)
+    text = _MD_ITALIC_RE.sub(r"\1", text)
+    text = _MD_HEADER_RE.sub("", text)
+    text = _MD_BULLET_RE.sub("", text)
+    return text
+
+
 def _sanitise(text) -> str:
-    """Replace § symbol with 'Clause ' and collapse double spaces."""
+    """Strip markdown formatting, replace § symbol with 'Clause ', collapse double spaces."""
     if not text:
         return ""
     if not isinstance(text, str):
         text = str(text)
+    text = _strip_markdown(text)
     return text.replace("§", "Clause ").replace("  ", " ").strip()
+
+
+# ── Section classifier (ISO 27001 core clause vs Annex A group) ──────────────
+# Matches the literal `section` strings the wizard assigns (see
+# Report_UI/src/lib/store.ts ISO_27001_QUESTIONS), so the audit report builder
+# can replicate the Reflex Pay template's fixed structure: ISO core clauses
+# 4-10 merge into one "3.0 Audit Finding Definition" section, while the four
+# Annex A groups become fixed-numbered sections 5/6/7/8.
+
+_ANNEX_GROUP_NUMBERS = {
+    "organizational": 5,
+    "organisational": 5,
+    "people": 6,
+    "physical": 7,
+    "technology": 8,
+}
+
+
+def _classify_clause_section(section_name: str) -> tuple[str, "str | int"]:
+    """
+    Classify a ReportSection.section_name for the audit-report builder.
+    Returns (kind, key):
+      ("core",  section_name) — an ISO core clause (§4..§10) → merge into "3.0"
+      ("annex", 5|6|7|8)      — an Annex A group → fixed-numbered section
+      ("other", section_name) — unrecognised (other standards) → generic fallback
+    """
+    name = (section_name or "").strip()
+    if name.startswith("§"):
+        return "core", name
+    if name.startswith("Annex A"):
+        lower = name.lower()
+        for keyword, num in _ANNEX_GROUP_NUMBERS.items():
+            if keyword in lower:
+                return "annex", num
+    return "other", name
+
+
+def _format_core_clause_label(section_name: str) -> str:
+    """Turn '§4 Context' into 'Clause 4 — Context' for the bold sub-divider."""
+    name = section_name.lstrip("§").strip()
+    parts = name.split(" ", 1)
+    if len(parts) == 2 and parts[0].replace(".", "").isdigit():
+        return f"Clause {parts[0]} — {parts[1]}"
+    return name
 
 
 def _header_row(table, headers: list[str], bg: str = DARK_NAVY, font_size: int = 9):
@@ -477,6 +552,7 @@ def _add_audit_details(doc: Document, report: Report, scope_content: str):
     # §2.1 Audit Criteria ─────────────────────────────────────────────────────
     _add_heading(doc, "2.1  Audit Criteria and Reference Documents", level=2)
     p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     r = p.add_run(
         "The international standard for information security ISO/IEC 27001:2022 (and its "
         "subsequent revisions) will be used as the basis of the criteria for the audit programme. "
@@ -488,6 +564,7 @@ def _add_audit_details(doc: Document, report: Report, scope_content: str):
     # §2.2 Audit Objectives ───────────────────────────────────────────────────
     _add_heading(doc, "2.2  Audit Objectives", level=2)
     objectives_intro = doc.add_paragraph()
+    objectives_intro.alignment = WD_ALIGN_PARAGRAPH.LEFT
     r = objectives_intro.add_run(
         "In line with the requirements of the international standards, "
         "the overall objectives of this internal audit are to:"
@@ -513,6 +590,7 @@ def _add_audit_details(doc: Document, report: Report, scope_content: str):
     # §2.3 Audit Method ───────────────────────────────────────────────────────
     _add_heading(doc, "2.3  Audit Method", level=2)
     p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     r = p.add_run(
         "The audit was conducted in accordance with ISO 19011. The combination of checklists "
         "and questionnaires, interviews, observation, documents, system, and record review with "
@@ -533,6 +611,7 @@ def _add_audit_details(doc: Document, report: Report, scope_content: str):
         if not line:
             continue
         p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         r = p.add_run(line)
         _style_run(r, size_pt=10)
         p.paragraph_format.space_after = Pt(3)
@@ -541,6 +620,7 @@ def _add_audit_details(doc: Document, report: Report, scope_content: str):
     # §2.5 Audit Findings Definition ──────────────────────────────────────────
     _add_heading(doc, "2.5  Audit Findings Definition (Status)", level=2)
     p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     r = p.add_run(
         "Where a discrepancy against the standard has been found, one of five types of items "
         "has been raised as follows:"
@@ -599,16 +679,19 @@ def _add_audit_details(doc: Document, report: Report, scope_content: str):
 def _add_consolidated_findings(doc: Document, all_findings: list[dict]):
     """
     Render a consolidated grouped summary of all clause findings — matching
-    the template §9 layout:  MaNC / MiNC / OBS / OFI bullet lists.
+    the Reflex Pay template's "9. Consolidated Audit Findings" layout exactly:
+    each rating bucket is a real Heading-2 ("a. Major Non-conformities [MaNC]"
+    etc, so it surfaces in the Word TOC field), followed by a single plain
+    paragraph listing the affected clause references as a comma-separated list
+    (not full finding sentences) — e.g. "Clause 5.2, Annex 5.30, Annex A.8.6".
     """
-    _add_heading(doc, "Consolidated Audit Findings", level=1)
+    _add_heading(doc, "9.  Consolidated Audit Findings", level=1)
 
     buckets = {
         "MaNC": [],
         "MiNC": [],
         "OBS":  [],
         "OFI":  [],
-        "A":    [],
     }
     # Accept both full names and abbreviations
     alias = {
@@ -618,8 +701,6 @@ def _add_consolidated_findings(doc: Document, all_findings: list[dict]):
         "Minor Non-Conformance": "MiNC",
         "Observation": "OBS",
         "Opportunity for Improvement": "OFI",
-        "Acceptable": "A",
-        "Conformant": "A",
     }
     for f in all_findings:
         raw = (f.get("status") or "").strip()
@@ -627,43 +708,26 @@ def _add_consolidated_findings(doc: Document, all_findings: list[dict]):
         if key in buckets:
             buckets[key].append(f)
 
-    labels = {
-        "MaNC": "Major Non-conformities [MaNC]",
-        "MiNC": "Minor Non-conformities [MiNC]",
-        "OBS":  "Observations",
-        "OFI":  "Opportunities for Improvement",
-    }
-    colours_map = {
-        "MaNC": "C0392B",
-        "MiNC": "E67E22",
-        "OBS":  "2471A3",
-        "OFI":  "1D6A3C",
-    }
+    bucket_order = [
+        ("a", "MaNC", "Major Non-conformities [MaNC]"),
+        ("b", "MiNC", "Minor Non-conformities [MiNC]"),
+        ("c", "OBS",  "Observations"),
+        ("d", "OFI",  "Opportunities for Improvement"),
+    ]
 
-    for key in ("MaNC", "MiNC", "OBS", "OFI"):
-        items = buckets[key]
-        # Section label
-        p_label = doc.add_paragraph()
-        r = p_label.add_run(f"{labels[key]}:")
-        _style_run(r, size_pt=10, bold=True, colour=colours_map[key])
+    for letter, key, label in bucket_order:
+        _add_heading(doc, f"{letter}. {label}", level=2, colour=DARK_NAVY)
 
-        if not items:
-            p = doc.add_paragraph(style="List Bullet")
-            p.clear()
+        clause_refs = [f.get("clause_ref", "").strip() for f in buckets[key] if f.get("clause_ref")]
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        if clause_refs:
+            r = p.add_run(", ".join(f"Clause {c}" for c in clause_refs))
+            _style_run(r, size_pt=10)
+        else:
             r = p.add_run("None identified.")
             _style_run(r, size_pt=10, colour=MID_GREY)
-        else:
-            for f in items:
-                clause = f.get("clause_ref", "")
-                finding = (f.get("audit_finding") or f.get("requirement_summary") or "")[:120]
-                p = doc.add_paragraph(style="List Bullet")
-                p.clear()
-                r_clause = p.add_run(f"Clause {clause} — " if clause else "")
-                _style_run(r_clause, size_pt=9, bold=True)
-                r_text = p.add_run(finding)
-                _style_run(r_text, size_pt=9)
         doc.add_paragraph()
-    doc.add_paragraph()
 
 
 # ── Audit Conclusions checklist (§10) ────────────────────────────────────────
@@ -673,7 +737,7 @@ def _add_audit_conclusions(doc: Document):
     Render the §10 Audit Conclusions table matching the PSE template:
     3-row Yes/No checklist table.
     """
-    _add_heading(doc, "Audit Conclusions and Recommendation", level=1)
+    _add_heading(doc, "10.  Audit conclusions and audit recommendation", level=1)
 
     # Introductory checklist table
     checklist = [
@@ -740,29 +804,34 @@ def _add_score_summary(doc: Document, report: Report):
 
 # ── Prose section renderer ────────────────────────────────────────────────────
 
-def _add_prose_section(doc: Document, section_name: str, content: str):
-    _add_heading(doc, _sanitise(section_name), level=1)
+def _add_prose_section_body(doc: Document, content: str):
+    """Render prose paragraphs without adding a heading (caller adds its own)."""
     for line in content.split("\n"):
         line = _sanitise(line.strip())
         if not line:
             continue
         p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         r = p.add_run(line)
         _style_run(r, size_pt=10)
         p.paragraph_format.space_after = Pt(4)
     doc.add_paragraph()
 
 
+def _add_prose_section(doc: Document, section_name: str, content: str):
+    _add_heading(doc, _sanitise(section_name), level=1)
+    _add_prose_section_body(doc, content)
+
+
 # ── Clause findings table (JSON section renderer) ────────────────────────────
 
-def _add_audit_findings_table(doc: Document, section_name: str, findings: list[dict]):
+def _add_audit_findings_table_body(doc: Document, findings: list[dict]):
     """
-    Render audit findings as a colour-coded 5-column table matching the PSE template.
+    Render the 5-column colour-coded findings table without adding a heading
+    (caller adds its own heading or bold divider).
     Columns: CONTROL | AUDIT FINDINGS | STATUS | EVIDENCE REVIEWED | RECOMMENDATION
     Only the STATUS cell is colour-coded; all other cells have white background.
     """
-    _add_heading(doc, section_name, level=2, colour=CORP_BLUE)
-
     headers = ["CONTROL", "AUDIT FINDINGS", "STATUS", "EVIDENCE REVIEWED", "RECOMMENDATION"]
     col_widths = [Cm(3.5), Cm(5.0), Cm(2.5), Cm(4.5), Cm(4.5)]
 
@@ -800,13 +869,22 @@ def _add_audit_findings_table(doc: Document, section_name: str, findings: list[d
     doc.add_paragraph()
 
 
+def _add_audit_findings_table(doc: Document, section_name: str, findings: list[dict]):
+    """
+    Render audit findings as a colour-coded 5-column table matching the PSE template,
+    with its own Heading-2 section title. Used for the generic ("other"-standard) path.
+    """
+    _add_heading(doc, section_name, level=2, colour=CORP_BLUE)
+    _add_audit_findings_table_body(doc, findings)
+
+
 def _add_gap_findings_table(doc: Document, section_name: str, findings: list[dict]):
     """Render gap findings as a colour-coded 6-column table."""
     _add_heading(doc, section_name, level=2, colour=CORP_BLUE)
 
     headers = ["Clause Ref", "Control", "CIRC Rating", "Current State", "Required State", "Recommendation"]
     tbl = doc.add_table(rows=1 + len(findings), cols=len(headers))
-    tbl.style = "Light Shading"
+    tbl.style = "Table Grid"
     _header_row(tbl, headers, bg=DARK_NAVY)
 
     for row_idx, f in enumerate(findings, start=1):
@@ -821,6 +899,10 @@ def _add_gap_findings_table(doc: Document, section_name: str, findings: list[dic
         _cell_text(cells[3], (f.get("current_state") or "")[:200],  size_pt=9)
         _cell_text(cells[4], (f.get("required_state") or "")[:150], size_pt=9)
         _cell_text(cells[5], f.get("recommendation") or "",          size_pt=9)
+
+        # Explicit white background for non-rating cells (avoid Word table-style banding)
+        for ci in (0, 1, 3, 4, 5):
+            _set_cell_bg(cells[ci], "FFFFFF")
 
     doc.add_paragraph()
 
@@ -843,7 +925,7 @@ def _add_gap_register(doc: Document, report: Report, service_type: str):
     )
 
     tbl = doc.add_table(rows=len(gaps) + 1, cols=len(col_headers))
-    tbl.style = "Light Shading"
+    tbl.style = "Table Grid"
     _header_row(tbl, col_headers)
 
     for row_idx, gap in enumerate(gaps, start=1):
@@ -878,6 +960,9 @@ def _add_gap_register(doc: Document, report: Report, service_type: str):
                        bold=(ci == 3),
                        colour=(colour["fg"] if ci == 3 else None))
         _set_cell_bg(cells[3], colour["bg"])
+        # Explicit white background for non-rating cells (avoid Word table-style banding)
+        for ci in (0, 1, 2, 4):
+            _set_cell_bg(cells[ci], "FFFFFF")
 
     doc.add_paragraph()
 
@@ -915,12 +1000,26 @@ def build_docx(report: Report) -> bytes:
 
     if is_gap:
         # ── Gap Assessment path ────────────────────────────────────────────
-        # Score summary + legend first, then prose sections, then gap register
+        # Phase-1 stopgap: Executive Summary right after the TOC, then Score
+        # Summary + Legend + Scope + clause findings + register + Conclusion.
+        # (Full Sterling-template structural rebuild is a separate later pass.)
+        exec_summary_content = ""
+        other_sections = []
+        for sec in sections:
+            if "executive summary" in sec.section_name.lower():
+                exec_summary_content = sec.content or ""
+            else:
+                other_sections.append(sec)
+
+        if exec_summary_content:
+            _add_prose_section(doc, "Executive Summary", exec_summary_content)
+            doc.add_page_break()
+
         _add_score_summary(doc, report)
         _add_legend(doc, service_type)
         doc.add_paragraph()
 
-        for sec in sections:
+        for sec in other_sections:
             content = sec.content or ""
             if content.startswith(JSON_PREFIX):
                 raw_json = content[len(JSON_PREFIX):]
@@ -936,41 +1035,99 @@ def build_docx(report: Report) -> bytes:
         _add_gap_register(doc, report, service_type)
 
     else:
-        # ── Audit Report path ──────────────────────────────────────────────
-        # 1. Executive Summary (prose only — first section with that name)
-        # 2. Audit Details block §2.0–§2.6 (includes Scope text extracted from sections)
-        # 3. Clause finding sections in order
-        # 4. Consolidated Findings
-        # 5. Audit Conclusions
+        # ── Audit Report path — exact replica of the Reflex Pay template ────
+        # 1.0 Executive Summary
+        # 2.0 Audit Details (2.1–2.6)
+        # 3.0 Audit Finding Definition — ALL core ISO clauses (4-10) merged into
+        #     ONE section, each clause group as a bold sub-divider + table
+        # 5./6./7./8. ISMS (Annex A Control) Audit Findings — one section per
+        #     Annex A group, fixed-numbered regardless of which are present
+        #     (the template itself skips "4." — intentional, not a bug)
+        # 9.  Consolidated Audit Findings (clause-ref lists per rating bucket)
+        # 10. Audit conclusions and audit recommendation
 
-        # Extract prose from named sections before rendering
+        # Extract named prose sections; classify the rest as core/annex/other
         exec_summary_content = ""
         scope_content = ""
-        clause_sections = []
         conclusion_content = ""
+        core_secs: list = []
+        annex_secs: dict = {}
+        other_secs: list = []
 
         for sec in sections:
             name_lower = sec.section_name.lower()
             if "executive summary" in name_lower:
                 exec_summary_content = sec.content or ""
-            elif "scope" in name_lower and not (sec.content or "").startswith(JSON_PREFIX):
+                continue
+            if "scope" in name_lower and not (sec.content or "").startswith(JSON_PREFIX):
                 scope_content = sec.content or ""
-            elif "conclusion" in name_lower:
+                continue
+            if "conclusion" in name_lower:
                 conclusion_content = sec.content or ""
-            else:
-                clause_sections.append(sec)
+                continue
 
-        # 1. Executive Summary
+            kind, key = _classify_clause_section(sec.section_name)
+            if kind == "core":
+                core_secs.append(sec)
+            elif kind == "annex":
+                annex_secs[key] = sec
+            else:
+                other_secs.append(sec)
+
+        # 1.0 Executive Summary
         if exec_summary_content:
             _add_prose_section(doc, "1.0  Executive Summary", exec_summary_content)
             doc.add_page_break()
 
-        # 2. Audit Details §2.0–§2.6
+        # 2.0 Audit Details §2.0–§2.6
         _add_audit_details(doc, report, scope_content)
 
-        # 3. Clause finding sections
-        section_num = 3
-        for sec in clause_sections:
+        # 3.0 Audit Finding Definition — merged core ISO clauses (4-10)
+        if core_secs:
+            _add_heading(doc, "3.0  Audit Finding Definition", level=1)
+            for sec in core_secs:
+                content = sec.content or ""
+                divider = doc.add_paragraph()
+                divider.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                r = divider.add_run(_format_core_clause_label(sec.section_name))
+                _style_run(r, size_pt=11, bold=True, colour=CORP_BLUE)
+
+                if content.startswith(JSON_PREFIX):
+                    raw_json = content[len(JSON_PREFIX):]
+                    try:
+                        findings = json.loads(raw_json)
+                        if isinstance(findings, list) and findings:
+                            all_clause_findings.extend(findings)
+                            _add_audit_findings_table_body(doc, findings)
+                            continue
+                    except json.JSONDecodeError:
+                        logger.warning("DOCX: Failed to parse JSON for section '%s'.", sec.section_name)
+                _add_prose_section_body(doc, content)
+            doc.add_page_break()
+
+        # 5./6./7./8. ISMS (Annex A Control) Audit Findings — fixed numbering
+        for group_num in (5, 6, 7, 8):
+            sec = annex_secs.get(group_num)
+            if not sec:
+                continue
+            content = sec.content or ""
+            _add_heading(doc, "ISMS (Annex A Control) Audit Findings", level=1)
+            if content.startswith(JSON_PREFIX):
+                raw_json = content[len(JSON_PREFIX):]
+                try:
+                    findings = json.loads(raw_json)
+                    if isinstance(findings, list) and findings:
+                        all_clause_findings.extend(findings)
+                        _add_audit_findings_table_body(doc, findings)
+                except json.JSONDecodeError:
+                    logger.warning("DOCX: Failed to parse JSON for section '%s'.", sec.section_name)
+            else:
+                _add_prose_section_body(doc, content)
+            doc.add_page_break()
+
+        # Unclassified sections (non-ISO27001 standards) — generic fallback
+        section_num = 11
+        for sec in other_secs:
             content = sec.content or ""
             sec_label = f"{section_num}.0  {sec.section_name}"
 
@@ -989,13 +1146,14 @@ def build_docx(report: Report) -> bytes:
             _add_prose_section(doc, sec_label, content)
             section_num += 1
 
-        doc.add_page_break()
+        if other_secs:
+            doc.add_page_break()
 
-        # 4. Consolidated Findings
+        # 9. Consolidated Audit Findings
         _add_consolidated_findings(doc, all_clause_findings)
         doc.add_page_break()
 
-        # 5. Audit Conclusions
+        # 10. Audit conclusions and audit recommendation
         _add_audit_conclusions(doc)
 
         # Append written conclusion prose if present

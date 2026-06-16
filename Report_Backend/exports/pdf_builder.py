@@ -3,14 +3,28 @@ Build a PDF compliance report using Django templates + WeasyPrint.
 Falls back to a plain bytes message if WeasyPrint is not installed.
 """
 import io
+import re
 from datetime import date
 from django.template.loader import render_to_string
 from reports.models import Report
 from exports.colour_map import get_colour, infer_rating, AUDIT_RATING_COLOURS, GAP_RATING_COLOURS
 
+_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_MD_BOLD_ALT_RE = re.compile(r"__(.+?)__")
+_MD_ITALIC_RE = re.compile(r"(?<!\*)\*(?!\*)([^*\n]+?)\*(?!\*)")
+_MD_HEADER_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_MD_BULLET_RE = re.compile(r"^[\-\*]\s+", re.MULTILINE)
+
 
 def _sanitise_pdf(text) -> str:
-    return (text or "").replace("§", "Clause ").replace("  ", " ")
+    """Strip markdown formatting and § symbol — mirrors docx_builder._sanitise()."""
+    text = text or ""
+    text = _MD_BOLD_RE.sub(r"\1", text)
+    text = _MD_BOLD_ALT_RE.sub(r"\1", text)
+    text = _MD_ITALIC_RE.sub(r"\1", text)
+    text = _MD_HEADER_RE.sub("", text)
+    text = _MD_BULLET_RE.sub("", text)
+    return text.replace("§", "Clause ").replace("  ", " ")
 
 
 def _build_gap_rows(gaps, service_type: str) -> list[dict]:

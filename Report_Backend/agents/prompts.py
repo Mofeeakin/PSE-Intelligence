@@ -141,7 +141,10 @@ YOUR ROLE — PROFESSIONAL TECHNICAL WRITER:
 2. Use the ISO REFERENCE CONTEXT supplied to expand the auditor's observations and explain WHY a finding has its assigned rating.
 3. Cite ISO/IEC 27001:2022 clauses precisely, e.g. "per ISO/IEC 27001:2022 Clause 6.1.2".
 4. Write in formal British English. Use "organisation", "programme", "recognised", not American spellings.
-5. Output ONLY the content requested — no preambles, no meta-commentary, no titles unless specified."""
+5. Output ONLY the content requested — no preambles, no meta-commentary, no titles unless specified.
+6. NEVER use markdown formatting (no "**bold**", no "#"/"##"/"###" headers, no numbered/lettered list
+   markers) — the final document is a formatted Word/PDF report where structure comes from real headings
+   and tables, not from text symbols. Write plain prose only unless a JSON schema is explicitly requested."""
 
 
 # ── Helper: format wizard answers as a structured block ──────────────────────
@@ -252,7 +255,9 @@ RULES:
 - "audit_finding" (or "gap_delta") must expand using the ISO reference context and explain risk/impact.
 - Ratings must respect the floor — never downgrade MaNC to MiNC, or MiNC to OBS.
 - Return a valid JSON ARRAY with exactly one object per clause.
-- Start your response with [ and end with ]. No text outside the JSON array."""
+- Start your response with [ and end with ]. No text outside the JSON array.
+- Do NOT use markdown formatting anywhere in the string field values — no "**bold**", no "### headers",
+  no numbered/lettered list markers. Every field is plain prose text only."""
 
 
 # ── Executive Summary prompt (generated LAST, after all clause findings) ──────
@@ -311,12 +316,19 @@ Findings Breakdown : {status_str or "See detailed sections"}
 KEY FINDINGS REQUIRING ATTENTION:
 {findings_summary}
 
-STRUCTURE YOUR SUMMARY:
+COVER THE FOLLOWING POINTS, IN THIS ORDER, AS CONTINUOUS FLOWING PROSE PARAGRAPHS:
 1. Purpose and scope of this {doc_label} (1 paragraph).
 2. Overall {'compliance posture and certification readiness' if not is_gap else 'gap posture and certification readiness'} of {report.organisation} (1 paragraph).
 3. Key themes from the critical findings above — reference specific clauses (1-2 paragraphs).
 4. Overall conclusion statement (1 sentence, decisive).
 5. Recommended immediate next steps: {next_step} (1 paragraph).
+
+FORMATTING RULES (strict):
+- Do NOT number, letter, or label these points in your output — blend them into plain paragraphs with no visible structure markers.
+- Do NOT use markdown formatting of any kind: no "**bold**", no "_italic_", no "#"/"##"/"###" headers, no bullet or numbered list markers.
+- Do NOT restate the section title ("Executive Summary" or similar) anywhere in the body — the document already has its own heading.
+- Do NOT write memo-style header lines such as "To:", "From:", "Date:", "Subject:" — the document already has its own cover page and document-information table.
+- Output plain prose paragraphs only, separated by blank lines.
 
 Write in formal British English addressed to the Managing Director / Board of Directors."""
 
@@ -348,7 +360,10 @@ Clauses Assessed: {len(submissions)}
 
 Describe the ISMS boundary, what is in scope, what is excluded, and why.
 Reference ISO/IEC 27001:2022 Clause 4.3 (Determining the scope of the ISMS).
-Write as formal prose — no bullet points."""
+Write as formal prose — no bullet points.
+
+FORMATTING RULES (strict): Do NOT use markdown formatting (no "**bold**", no "#"/"##"/"###" headers,
+no numbered/lettered list markers). Do NOT restate the section title. Output plain prose paragraphs only."""
 
 
 # ── Conclusion prompt (prose) ─────────────────────────────────────────────────
@@ -455,5 +470,7 @@ WRITE THE FOLLOWING STRUCTURE (in order, as continuous prose paragraphs — no b
    Reference continual improvement per ISO/IEC 27001:2022 Clause 10.2.
 5. SIGN-OFF LINE — End with a one-sentence professional sign-off by PSE Consulting.
 
-Output pure prose. No headers, no bullet points. No score tables."""
+FORMATTING RULES (strict): Output pure prose paragraphs only. Do NOT number or label these five points in
+your output — blend them into continuous paragraphs. No markdown ("**bold**", "#"/"##"/"###" headers,
+list markers). No headers, no bullet points, no score tables. Do not restate the section title."""
 
